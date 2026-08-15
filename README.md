@@ -7,7 +7,8 @@ Execution Force Engine rozpoznaje intencję, wybiera kontrakt i prowadzi misję,
 a deterministyczny broker poza modelem egzekwuje scope, target, port, trasę,
 wygaśnięcie i stan evidence.
 
-> Status `v0.1.0`: działający control-plane vertical slice. Realne skanery,
+> Status `v0.1.1`: działający control-plane vertical slice oraz publiczny,
+> stateless replay demo. Realne skanery,
 > exploity, Tor, microVM, gVisor i sensory blue-team są celowo `UNBACKED`.
 > Endpoint wykonawczy symuluje operację bez ruchu sieciowego i zapisuje ten fakt
 > w ledgerze. Brak backingu nigdy nie jest raportowany jako wykonanie.
@@ -27,6 +28,8 @@ wygaśnięcie i stan evidence.
 - 20-repo benchmark z przeglądem licencji;
 - test E2E: `mission -> Engine receipt -> signed scope -> decision -> simulated
   worker -> evidence -> replay`.
+- Vercel-safe replay: bundled receipt vector → prawdziwy broker → prawdziwa
+  symulacja → pięcioelementowy hash-chain, zawsze z `live_engine_called=false`.
 
 ## Architecture Lock
 
@@ -42,7 +45,10 @@ flowchart TB
     BLUE -.-> LEDGER
 ```
 
-Pełny lock: [`docs/ARCHITECTURE_LOCK_V0.1.md`](docs/ARCHITECTURE_LOCK_V0.1.md).
+Pełny lock prywatnego runtime:
+[`docs/ARCHITECTURE_LOCK_V0.1.md`](docs/ARCHITECTURE_LOCK_V0.1.md).
+Kontrakt publicznego deployu:
+[`docs/ARCHITECTURE_LOCK_V0.1.1.md`](docs/ARCHITECTURE_LOCK_V0.1.1.md).
 
 ## Wymagania
 
@@ -72,11 +78,27 @@ sherlock-osa serve --env-file .env
 
 Panel: `http://127.0.0.1:8787`
 
+## Publiczny replay na Vercel
+
+```bash
+vercel deploy
+```
+
+Vercel uruchamia `api/index.py` jako Python Function. Nie wymaga sekretów,
+ponieważ publiczna wersja nie tworzy nowych misji i nie wywołuje live Engine.
+Endpoint `POST /api/v1/demo/replay` akceptuje tylko jeden target `lab://...` w
+trybie `LAB_RANGE`, po czym wykonuje cały bezefektowy replay w jednym requestcie.
+
+Publiczny hash-chain jest `PER_REQUEST`; trwały ledger i prawdziwe misje istnieją
+wyłącznie w prywatnym runtime. To jest celowy podział bezpieczeństwa, nie fallback
+Engine.
+
 ## Walidacja
 
 ```bash
 python3 scripts/verify.py
 python3 scripts/smoke.py
+python3 scripts/smoke_demo.py
 ```
 
 Smoke używa kontrolowanego fake Engine wyłącznie jako test double. Produkcyjny
@@ -116,4 +138,4 @@ adapterów i ograniczenia licencyjne. Pełna tabela:
 ## Licencja
 
 Kod Sherlock OSA: Apache-2.0. Zewnętrzne projekty zachowują własne licencje i
-znaki towarowe. `v0.1.0` nie vendoruje kodu trzecich stron.
+znaki towarowe. `v0.1.1` nie vendoruje kodu trzecich stron.

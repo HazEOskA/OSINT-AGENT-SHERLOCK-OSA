@@ -21,3 +21,7 @@ minimal proposed fix when possible.
   exploits, shell commands or arbitrary payloads.
 - A container is not claimed as the final hostile-code security boundary.
 - Secrets must come from environment variables and must never enter evidence.
+
+Publiczny Vercel replay v0.1.1 nie wywołuje live Engine i nie posiada durable
+storage. Jego podpis chroni spójność wektora demonstracyjnego w trakcie jednego
+requestu; nie jest produkcyjną tożsamością runtime ani atestacją.

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 
+from sherlock_osa import __version__
 from sherlock_osa.api import create_server
 from sherlock_osa.config import Settings, load_env_file
 from sherlock_osa.engine import OsaEngineClient
@@ -53,7 +54,7 @@ def main(argv: list[str] | None = None) -> int:
             print(result)
             return 0 if result["valid"] else 1
         server = create_server(service, settings.host, settings.port)
-        print(f"Sherlock OSA v0.1.0: http://{settings.host}:{settings.port}")
+        print(f"Sherlock OSA v{__version__}: http://{settings.host}:{settings.port}")
         print(f"OSA Engine pin: {settings.engine_commit_sha}")
         server.serve_forever()
         return 0

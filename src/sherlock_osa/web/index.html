@@ -16,6 +16,7 @@
     </a>
     <div class="status-row">
       <span class="pill pill-green"><i></i> DEFAULT DENY</span>
+      <span class="pill" id="deployment-mode"><i></i> RUNTIME</span>
       <span class="pill" id="service-status"><i></i> ŁĄCZENIE</span>
     </div>
   </header>
@@ -23,7 +24,7 @@
   <main id="top">
     <section class="hero">
       <div class="hero-copy">
-        <p class="eyebrow">EVIDENCE BEFORE EXECUTION // v0.1.0</p>
+        <p class="eyebrow">EVIDENCE BEFORE EXECUTION // v0.1.1</p>
         <h1>Nie ufaj agentowi.<br><em>Ogranicz jego świat.</em></h1>
         <p class="lead">OSA Engine prowadzi misję. Deterministyczny broker blokuje wszystko,
           czego nie ma w podpisanym scope. Każda decyzja trafia do weryfikowalnego ledgeru.</p>
@@ -33,7 +34,7 @@
         </div>
       </div>
       <div class="scope-card">
-        <div class="scope-head"><span>MISSION_SCOPE</span><b>SIGNED</b></div>
+        <div class="scope-head"><span>MISSION_SCOPE</span><b>FAIL-CLOSED</b></div>
         <pre><code>{
   "mode": "LAB_RANGE",
   "target": "lab://juice-shop",
@@ -48,7 +49,7 @@
     <section class="metrics" aria-label="Status systemu">
       <article><span>ROUTER</span><strong>OSA ENGINE</strong><small>jedyny router intencji</small></article>
       <article><span>POLICY</span><strong>OUT-OF-MODEL</strong><small>deterministyczny broker</small></article>
-      <article><span>EXECUTION</span><strong>SIMULATION</strong><small>zero efektu sieciowego v0.1</small></article>
+        <article><span>EXECUTION</span><strong>SIMULATION</strong><small>zero efektu sieciowego v0.1.1</small></article>
       <article><span>EVIDENCE</span><strong>SHA-256</strong><small>append + replay</small></article>
     </section>
 
@@ -58,7 +59,7 @@
         <h2>Jedna misja. Cztery rozdzielone płaszczyzny.</h2>
       </div>
       <div class="zone-grid">
-        <article class="zone active"><span class="zone-no">01</span><h3>Control</h3><p>Engine, scope, podpis, approval i kill-switch.</p><small>BACKED v0.1</small></article>
+        <article class="zone active"><span class="zone-no">01</span><h3>Control</h3><p>Engine, scope, podpis, approval i kill-switch.</p><small>PRIVATE RUNTIME + PUBLIC REPLAY</small></article>
         <article class="zone"><span class="zone-no">02</span><h3>Research</h3><p>Pasywne źródła przez wymuszoną trasę, bez swobodnego egressu.</p><small>UNBACKED</small></article>
         <article class="zone"><span class="zone-no">03</span><h3>Range</h3><p>Disposable targety, worker microVM i wyłącznie route range-only.</p><small>UNBACKED</small></article>
         <article class="zone"><span class="zone-no">04</span><h3>Blue + Evidence</h3><p>Telemetria tej samej misji, patch, replay i retest.</p><small>LEDGER BACKED</small></article>
@@ -69,8 +70,8 @@
       <div class="mission-copy">
         <p class="eyebrow">SAFE VERTICAL SLICE</p>
         <h2>Utwórz podpisany scope</h2>
-        <p>Panel najpierw wysyła intencję do OSA Engine. Dopiero receipt Engine zostaje
-          związany z lokalnym targetem i podpisany. W v0.1 zatwierdzona operacja nadal
+        <p id="mission-intro">Panel najpierw wysyła intencję do OSA Engine. Dopiero receipt Engine zostaje
+          związany z lokalnym targetem i podpisany. W v0.1.1 zatwierdzona operacja nadal
           kończy się wyłącznie symulacją.</p>
         <ol class="flow-list">
           <li><b>01</b><span>Engine resolve + run</span></li>
@@ -82,7 +83,7 @@
       </div>
 
       <form class="mission-form" id="mission-form">
-        <label>Klucz operatora
+        <label id="api-key-field">Klucz operatora
           <input id="api-key" name="api_key" type="password" autocomplete="off" placeholder="SHERLOCK_API_KEY" required>
         </label>
         <label>Cel misji
@@ -131,8 +132,8 @@
         <label>Operator ID
           <input name="operator_id" value="osa" required>
         </label>
-        <button class="button primary full" type="submit">ENGINE → SIGN → DECIDE → SIMULATE</button>
-        <p class="form-note">Żaden skaner ani shell nie zostanie uruchomiony w tym release.</p>
+        <button class="button primary full" id="submit-flow" type="submit">ENGINE → SIGN → DECIDE → SIMULATE</button>
+        <p class="form-note" id="form-note">Żaden skaner ani shell nie zostanie uruchomiony w tym release.</p>
       </form>
     </section>
 
@@ -152,7 +153,7 @@
   </main>
 
   <footer>
-    <span>SHERLOCK OSA // APACHE-2.0</span>
+    <span>SHERLOCK OSA v0.1.1 // APACHE-2.0</span>
     <span>TRUTH BEFORE CONFIDENCE</span>
   </footer>
 

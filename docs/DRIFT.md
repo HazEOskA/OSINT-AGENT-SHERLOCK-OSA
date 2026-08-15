@@ -26,3 +26,13 @@
   atestacją obrazu procesu Engine.
 - Pełna runtime identity pozostaje `CONFIG_BOUND_NOT_ATTESTED` do czasu podpisu
   release/image lub zewnętrznego verifiera deploymentu.
+
+## DRIFT-004 — Public Vercel runtime nie posiada live Engine ani durable storage
+
+- Publiczny deployment nie ma poświadczeń OSA Engine ani trwałej bazy evidence.
+- Sherlock nie używa fake Engine jako produkcyjnego fallbacku. Publiczny endpoint
+  jest osobnym replayem oznaczonego test vectora i raportuje
+  `live_engine_called=false` oraz `persistence=PER_REQUEST`.
+- Closure: wdrożyć prywatny backend na platformie nazwanej w Architecture Lock,
+  podłączyć live Engine i durable trusted storage, a następnie wykonać osobną
+  walidację deploymentu. Nie wolno zamieniać publicznego replayu w Attack Range.

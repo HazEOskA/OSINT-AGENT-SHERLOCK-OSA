@@ -1,7 +1,12 @@
 "use strict";
 
 const $ = (selector) => document.querySelector(selector);
-const state = { lastMission: null, lastDecision: null };
+const state = {
+  deploymentMode: "UNKNOWN",
+  lastMission: null,
+  lastDecision: null,
+  lastBundle: null,
+};
 
 function toast(message, error = false) {
   const element = $("#toast");
@@ -61,8 +66,9 @@ function renderResult(bundle) {
   const decision = bundle.decision?.decision || {};
   const receipt = bundle.execution?.receipt || {};
   const replay = bundle.replay || {};
+  const isPublicReplay = bundle.deployment_mode === "PUBLIC_REPLAY_DEMO";
   const facts = [
-    ["ENGINE", mission.engine_state || "UNKNOWN"],
+    ["ENGINE", isPublicReplay ? "REPLAY VECTOR" : (mission.engine_state || "UNKNOWN")],
     ["POLICY", decision.effect || "UNKNOWN"],
     ["NETWORK EFFECT", String(receipt.network_effect_performed ?? "UNKNOWN").toUpperCase()],
     ["REPLAY", replay.valid === true ? "VALID" : "UNKNOWN"],
@@ -87,9 +93,22 @@ async function runFlow(event) {
   const form = event.currentTarget;
   const button = form.querySelector("button[type=submit]");
   button.disabled = true;
-  button.textContent = "WYKONYWANIE KONTROLOWANEGO FLOW…";
+  button.textContent = state.deploymentMode === "PUBLIC_REPLAY_DEMO"
+    ? "WERYFIKACJA PUBLICZNEGO REPLAYU…"
+    : "WYKONYWANIE KONTROLOWANEGO FLOW…";
   try {
     const payload = missionPayload(form);
+    if (state.deploymentMode === "PUBLIC_REPLAY_DEMO") {
+      const bundle = await api(
+        "/api/v1/demo/replay",
+        { method: "POST", body: JSON.stringify(payload) },
+        false,
+      );
+      state.lastBundle = bundle;
+      renderResult(bundle);
+      toast("Replay VALID. Live Engine i efekty sieciowe nie zostały uruchomione.");
+      return;
+    }
     const missionResponse = await api("/api/v1/missions", { method: "POST", body: JSON.stringify(payload) });
     const mission = missionResponse.mission;
     state.lastMission = mission;
@@ -115,22 +134,56 @@ async function runFlow(event) {
     const replayResponse = await api(`/api/v1/missions/${mission.mission_id}/replay`, {
       method: "POST", body: "{}",
     });
-    renderResult({ mission: missionResponse, decision: decisionResponse, execution: executionResponse, replay: replayResponse });
+    const bundle = { mission: missionResponse, decision: decisionResponse, execution: executionResponse, replay: replayResponse };
+    state.lastBundle = bundle;
+    renderResult(bundle);
     toast("Flow zakończony. Sprawdź receipt i replay.");
   } catch (error) {
     toast(`${error.code || "ERROR"}: ${error.message}`, true);
   } finally {
     button.disabled = false;
-    button.textContent = "ENGINE → SIGN → DECIDE → SIMULATE";
+    button.textContent = state.deploymentMode === "PUBLIC_REPLAY_DEMO"
+      ? "REPLAY VECTOR → BROKER → EVIDENCE"
+      : "ENGINE → SIGN → DECIDE → SIMULATE";
   }
+}
+
+function configurePublicReplay() {
+  const apiKeyField = $("#api-key-field");
+  const apiKey = $("#api-key");
+  apiKeyField.hidden = true;
+  apiKey.required = false;
+
+  const form = $("#mission-form");
+  const mode = form.elements.namedItem("mode");
+  const targetKind = form.elements.namedItem("target_kind");
+  const ttl = form.elements.namedItem("ttl_minutes");
+  mode.value = "LAB_RANGE";
+  mode.disabled = true;
+  targetKind.value = "LAB_ASSET";
+  targetKind.disabled = true;
+  ttl.max = "60";
+  if (Number(ttl.value) > 60) ttl.value = "30";
+
+  $("#deployment-mode").classList.add("online");
+  $("#deployment-mode").innerHTML = "<i></i> PUBLIC REPLAY";
+  $("#mission-intro").textContent =
+    "Publiczny deploy odtwarza jawnie oznaczony wektor receiptu OSA przez prawdziwy podpis, broker, worker symulacyjny i hash-chain. Nie wywołuje live Engine, sieci ani shella.";
+  $("#submit-flow").textContent = "REPLAY VECTOR → BROKER → EVIDENCE";
+  $("#form-note").textContent =
+    "Tryb publiczny jest stateless i LAB-only. Nowe misje wykonawcze wymagają prywatnego runtime połączonego z OSA Engine.";
 }
 
 async function loadStatus() {
   try {
     const health = await api("/api/v1/health", {}, false);
+    state.deploymentMode = health.deployment_mode || "PRIVATE_CONTROL_PLANE";
     const status = $("#service-status");
     status.classList.add("online");
-    status.innerHTML = "<i></i> API ONLINE";
+    status.innerHTML = state.deploymentMode === "PUBLIC_REPLAY_DEMO"
+      ? "<i></i> DEMO ONLINE"
+      : "<i></i> API ONLINE";
+    if (state.deploymentMode === "PUBLIC_REPLAY_DEMO") configurePublicReplay();
     if (health.status !== "OK") status.textContent = `API ${health.status}`;
   } catch {
     $("#service-status").textContent = "API OFFLINE";
@@ -169,6 +222,20 @@ async function loadReferences() {
 }
 
 async function verifyLedger() {
+  if (state.deploymentMode === "PUBLIC_REPLAY_DEMO") {
+    const verification = state.lastBundle?.evidence?.verification;
+    if (!verification) {
+      toast("Najpierw uruchom publiczny replay — ledger powstaje i jest sprawdzany per request.");
+      return;
+    }
+    toast(
+      verification.valid
+        ? `Ledger VALID // ${verification.record_count} rekordów // ${verification.head_hash.slice(0, 12)}…`
+        : `Ledger INVALID: ${(verification.errors || []).join(", ")}`,
+      !verification.valid,
+    );
+    return;
+  }
   try {
     const result = await api("/api/v1/evidence/verify");
     toast(result.valid ? `Ledger VALID // ${result.record_count} rekordów // ${result.head_hash.slice(0, 12)}…` : `Ledger INVALID: ${result.errors.join(", ")}`, !result.valid);

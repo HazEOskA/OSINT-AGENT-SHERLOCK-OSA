@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sherlock-osa"
-version = "0.1.0"
+version = "0.1.1"
 description = "Controlled, evidence-first agent security laboratory powered by OSA Execution Force Engine."
 readme = "README.md"
 requires-python = ">=3.12"

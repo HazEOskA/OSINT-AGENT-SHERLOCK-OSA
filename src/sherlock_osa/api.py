@@ -23,9 +23,9 @@ ASSETS = {
 }
 
 
-def handler_factory(service: MissionService) -> type[BaseHTTPRequestHandler]:
+def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
-        server_version = "SherlockOSA/0.1"
+        server_version = "SherlockOSA/0.1.1"
         sys_version = ""
 
         def log_message(self, format_string: str, *args: object) -> None:
@@ -84,6 +84,14 @@ def handler_factory(service: MissionService) -> type[BaseHTTPRequestHandler]:
             except (json.JSONDecodeError, UnicodeDecodeError) as exc:
                 raise SherlockError("INVALID_JSON", "Request body nie jest poprawnym JSON.") from exc
 
+        def _request_target(self) -> tuple[str, dict[str, list[str]]]:
+            parsed = urlsplit(self.path)
+            query = parse_qs(parsed.query, keep_blank_values=True)
+            routed_path = query.get("__osa_path")
+            if parsed.path in {"/api/index.py", "/api/index"} and routed_path:
+                return "/" + routed_path[0].lstrip("/"), query
+            return parsed.path, query
+
         def _route(self, callback: Callable[[], None]) -> None:
             try:
                 callback()
@@ -106,15 +114,14 @@ def handler_factory(service: MissionService) -> type[BaseHTTPRequestHandler]:
             self._route(self._do_get)
 
         def _do_get(self) -> None:
-            parsed = urlsplit(self.path)
-            path = parsed.path
+            path, query = self._request_target()
             if path in ASSETS:
                 filename, content_type = ASSETS[path]
                 resource = files("sherlock_osa").joinpath("web", filename)
                 self._send_bytes(200, resource.read_bytes(), content_type)
                 return
             if path == "/api/v1/health":
-                probe = parse_qs(parsed.query).get("probe_engine", ["false"])[0].lower() == "true"
+                probe = query.get("probe_engine", ["false"])[0].lower() == "true"
                 if probe:
                     self._require_auth()
                 self._json(200, service.health(probe_engine=probe))
@@ -142,8 +149,14 @@ def handler_factory(service: MissionService) -> type[BaseHTTPRequestHandler]:
             self._route(self._do_post)
 
         def _do_post(self) -> None:
+            path, _ = self._request_target()
+            if path == "/api/v1/demo/replay":
+                demo_replay = getattr(service, "public_demo_replay", None)
+                if not callable(demo_replay):
+                    raise SherlockError("NOT_FOUND", "Endpoint nie istnieje.", status=404)
+                self._json(200, demo_replay(self._body_json()))
+                return
             self._require_auth()
-            path = urlsplit(self.path).path
             if path == "/api/v1/missions":
                 self._json(201, service.create_mission(self._body_json()))
                 return

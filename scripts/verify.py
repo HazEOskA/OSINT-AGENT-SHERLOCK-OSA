@@ -51,7 +51,15 @@ def main() -> int:
 
     parser = UiContractParser()
     parser.feed((SRC / "sherlock_osa" / "web" / "index.html").read_text(encoding="utf-8"))
-    required_ids = {"mission-form", "api-key", "result", "repo-grid", "service-status"}
+    required_ids = {
+        "mission-form",
+        "api-key",
+        "deployment-mode",
+        "result",
+        "repo-grid",
+        "service-status",
+        "submit-flow",
+    }
     checks.append(("ui_required_elements", required_ids <= parser.ids))
     checks.append(("ui_external_script_only", parser.external_scripts == 1 and parser.inline_scripts == 0))
     node = shutil.which("node")
@@ -64,6 +72,10 @@ def main() -> int:
             text=True,
         )
         checks.append(("javascript_syntax", javascript.returncode == 0))
+
+    vercel_config = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
+    checks.append(("vercel_python_entrypoint", vercel_config["builds"][0]["src"] == "api/index.py"))
+    checks.append(("vercel_catch_all_route", vercel_config["routes"][0]["src"] == "/.*"))
 
     environment = os.environ.copy()
     environment["PYTHONPATH"] = str(SRC)

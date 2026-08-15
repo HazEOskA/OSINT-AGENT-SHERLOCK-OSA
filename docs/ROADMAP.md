@@ -6,6 +6,13 @@
 - OSA Engine HTTP adapter;
 - zero real security-tool execution.
 
+## v0.1.1 — public replay preview
+
+- stateless Vercel Python Function;
+- bundled OSA receipt test vector z jawnym `live_engine_called=false`;
+- real signer, broker, simulation worker i per-request hash-chain;
+- brak sekretów, egressu i publicznego Attack Range.
+
 ## v0.2 — isolated lab worker
 
 - osobny worker host;

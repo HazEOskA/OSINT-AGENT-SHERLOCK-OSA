@@ -1,4 +1,4 @@
-.PHONY: install run test verify smoke
+.PHONY: install run test verify smoke smoke-demo
 
 install:
 	python3 -m pip install -e .
@@ -14,3 +14,6 @@ verify:
 
 smoke:
 	python3 scripts/smoke.py
+
+smoke-demo:
+	python3 scripts/smoke_demo.py

@@ -47,6 +47,7 @@ class ApiTests(unittest.TestCase):
         status, health = self.request("GET", "/api/v1/health", auth=False)
         self.assertEqual(status, 200)
         self.assertEqual(health["execution_backing"], "SIMULATION_ONLY")
+        self.assertEqual(health["deployment_mode"], "PRIVATE_CONTROL_PLANE")
         status, benchmark = self.request("GET", "/api/v1/reference-repos", auth=False)
         self.assertEqual(status, 200)
         self.assertEqual(len(benchmark["repositories"]), 20)

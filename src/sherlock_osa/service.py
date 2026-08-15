@@ -33,6 +33,8 @@ from sherlock_osa.worker import ADAPTERS, SimulationWorker
 
 
 class MissionService:
+    deployment_mode = "PRIVATE_CONTROL_PLANE"
+
     def __init__(
         self,
         *,
@@ -69,6 +71,7 @@ class MissionService:
             "service": "sherlock-osa",
             "version": __version__,
             "status": "OK" if ledger.valid else "DEGRADED",
+            "deployment_mode": self.deployment_mode,
             "execution_backing": "SIMULATION_ONLY",
             "engine": dict(engine),
             "evidence": ledger.to_dict(),

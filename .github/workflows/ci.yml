@@ -24,3 +24,5 @@ jobs:
         run: python scripts/verify.py
       - name: Smoke vertical slice
         run: python scripts/smoke.py
+      - name: Smoke public replay
+        run: python scripts/smoke_demo.py
