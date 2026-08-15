@@ -165,6 +165,28 @@ function configurePublicReplay() {
   ttl.max = "60";
   if (Number(ttl.value) > 60) ttl.value = "30";
 
+  const demoCapabilities = new Set([
+    "lab.http.probe",
+    "lab.network.scan",
+    "lab.attack.simulate",
+    "blue.telemetry.replay",
+  ]);
+  const capabilitySelect = form.elements.namedItem("capability");
+  for (const option of capabilitySelect.options) {
+    option.disabled = !demoCapabilities.has(option.value);
+  }
+
+  const replaySteps = [
+    "Load bundled OSA receipt vector",
+    "HMAC demo scope",
+    "Capability decision",
+    "Simulation + evidence",
+    "Deterministic replay",
+  ];
+  document.querySelectorAll(".flow-list li span").forEach((element, index) => {
+    element.textContent = replaySteps[index];
+  });
+
   $("#deployment-mode").classList.add("online");
   $("#deployment-mode").innerHTML = "<i></i> PUBLIC REPLAY";
   $("#mission-intro").textContent =

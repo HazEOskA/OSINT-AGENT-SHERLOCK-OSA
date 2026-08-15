@@ -62,6 +62,10 @@ def main() -> int:
     }
     checks.append(("ui_required_elements", required_ids <= parser.ids))
     checks.append(("ui_external_script_only", parser.external_scripts == 1 and parser.inline_scripts == 0))
+    styles = (SRC / "sherlock_osa" / "web" / "styles.css").read_text(encoding="utf-8")
+    javascript_source = (SRC / "sherlock_osa" / "web" / "app.js").read_text(encoding="utf-8")
+    checks.append(("ui_hidden_contract", "[hidden] { display: none !important; }" in styles))
+    checks.append(("ui_demo_capability_filter", "option.disabled = !demoCapabilities.has" in javascript_source))
     node = shutil.which("node")
     if node:
         javascript = subprocess.run(
