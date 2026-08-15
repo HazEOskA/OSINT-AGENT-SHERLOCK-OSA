@@ -1,0 +1,6 @@
+Sherlock OSA — Controlled Agent Security Lab
+Copyright 2026 Bartosz Osinski (Osa) and contributors.
+
+The project studies public open-source systems listed in
+docs/REFERENCE_BENCHMARK_2026-08-15.md. No third-party source code is vendored
+in v0.1.0. Project names and trademarks remain property of their owners.

@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Sherlock OSA — Controlled Agent Security Lab</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+  <div class="noise" aria-hidden="true"></div>
+  <header class="topbar">
+    <a class="brand" href="#top" aria-label="Sherlock OSA">
+      <span class="brand-mark">S//O</span>
+      <span><strong>SHERLOCK OSA</strong><small>CONTROLLED AGENT SECURITY LAB</small></span>
+    </a>
+    <div class="status-row">
+      <span class="pill pill-green"><i></i> DEFAULT DENY</span>
+      <span class="pill" id="service-status"><i></i> ŁĄCZENIE</span>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">EVIDENCE BEFORE EXECUTION // v0.1.0</p>
+        <h1>Nie ufaj agentowi.<br><em>Ogranicz jego świat.</em></h1>
+        <p class="lead">OSA Engine prowadzi misję. Deterministyczny broker blokuje wszystko,
+          czego nie ma w podpisanym scope. Każda decyzja trafia do weryfikowalnego ledgeru.</p>
+        <div class="hero-actions">
+          <a class="button primary" href="#mission">Utwórz misję testową</a>
+          <button class="button ghost" id="verify-ledger" type="button">Zweryfikuj ledger</button>
+        </div>
+      </div>
+      <div class="scope-card">
+        <div class="scope-head"><span>MISSION_SCOPE</span><b>SIGNED</b></div>
+        <pre><code>{
+  "mode": "LAB_RANGE",
+  "target": "lab://juice-shop",
+  "capability": "lab.http.probe",
+  "route": "range-only",
+  "network_effect": false
+}</code></pre>
+        <div class="scope-foot"><span>ENGINE PIN</span><code>f365360…ce38d</code></div>
+      </div>
+    </section>
+
+    <section class="metrics" aria-label="Status systemu">
+      <article><span>ROUTER</span><strong>OSA ENGINE</strong><small>jedyny router intencji</small></article>
+      <article><span>POLICY</span><strong>OUT-OF-MODEL</strong><small>deterministyczny broker</small></article>
+      <article><span>EXECUTION</span><strong>SIMULATION</strong><small>zero efektu sieciowego v0.1</small></article>
+      <article><span>EVIDENCE</span><strong>SHA-256</strong><small>append + replay</small></article>
+    </section>
+
+    <section class="section architecture">
+      <div class="section-title">
+        <p class="eyebrow">TRUST ZONES</p>
+        <h2>Jedna misja. Cztery rozdzielone płaszczyzny.</h2>
+      </div>
+      <div class="zone-grid">
+        <article class="zone active"><span class="zone-no">01</span><h3>Control</h3><p>Engine, scope, podpis, approval i kill-switch.</p><small>BACKED v0.1</small></article>
+        <article class="zone"><span class="zone-no">02</span><h3>Research</h3><p>Pasywne źródła przez wymuszoną trasę, bez swobodnego egressu.</p><small>UNBACKED</small></article>
+        <article class="zone"><span class="zone-no">03</span><h3>Range</h3><p>Disposable targety, worker microVM i wyłącznie route range-only.</p><small>UNBACKED</small></article>
+        <article class="zone"><span class="zone-no">04</span><h3>Blue + Evidence</h3><p>Telemetria tej samej misji, patch, replay i retest.</p><small>LEDGER BACKED</small></article>
+      </div>
+    </section>
+
+    <section class="section mission-layout" id="mission">
+      <div class="mission-copy">
+        <p class="eyebrow">SAFE VERTICAL SLICE</p>
+        <h2>Utwórz podpisany scope</h2>
+        <p>Panel najpierw wysyła intencję do OSA Engine. Dopiero receipt Engine zostaje
+          związany z lokalnym targetem i podpisany. W v0.1 zatwierdzona operacja nadal
+          kończy się wyłącznie symulacją.</p>
+        <ol class="flow-list">
+          <li><b>01</b><span>Engine resolve + run</span></li>
+          <li><b>02</b><span>HMAC mission scope</span></li>
+          <li><b>03</b><span>Capability decision</span></li>
+          <li><b>04</b><span>Simulation + evidence</span></li>
+          <li><b>05</b><span>Deterministic replay</span></li>
+        </ol>
+      </div>
+
+      <form class="mission-form" id="mission-form">
+        <label>Klucz operatora
+          <input id="api-key" name="api_key" type="password" autocomplete="off" placeholder="SHERLOCK_API_KEY" required>
+        </label>
+        <label>Cel misji
+          <textarea name="goal" rows="3" required>Sprawdź przepływ policy i evidence dla Juice Shop w izolowanym labie</textarea>
+        </label>
+        <div class="form-row">
+          <label>Tryb
+            <select name="mode">
+              <option value="LAB_RANGE">LAB_RANGE</option>
+              <option value="RESEARCH_PASSIVE">RESEARCH_PASSIVE</option>
+              <option value="AUTHORIZED_EXTERNAL">AUTHORIZED_EXTERNAL — BLOCKED</option>
+            </select>
+          </label>
+          <label>TTL (min)
+            <input name="ttl_minutes" type="number" min="1" max="1440" value="30" required>
+          </label>
+        </div>
+        <div class="form-row">
+          <label>Typ targetu
+            <select name="target_kind">
+              <option value="LAB_ASSET">LAB_ASSET</option>
+              <option value="USERNAME">USERNAME</option>
+              <option value="DOMAIN">DOMAIN</option>
+              <option value="INDICATOR">INDICATOR</option>
+            </select>
+          </label>
+          <label>Target
+            <input name="target_value" value="lab://juice-shop" required>
+          </label>
+        </div>
+        <div class="form-row">
+          <label>Capability
+            <select name="capability">
+              <option value="lab.http.probe">lab.http.probe</option>
+              <option value="lab.network.scan">lab.network.scan</option>
+              <option value="lab.attack.simulate">lab.attack.simulate</option>
+              <option value="blue.telemetry.replay">blue.telemetry.replay</option>
+              <option value="osint.username.lookup">osint.username.lookup</option>
+              <option value="osint.domain.passive">osint.domain.passive</option>
+            </select>
+          </label>
+          <label>Port
+            <input name="port" type="number" min="1" max="65535" value="3000">
+          </label>
+        </div>
+        <label>Operator ID
+          <input name="operator_id" value="osa" required>
+        </label>
+        <button class="button primary full" type="submit">ENGINE → SIGN → DECIDE → SIMULATE</button>
+        <p class="form-note">Żaden skaner ani shell nie zostanie uruchomiony w tym release.</p>
+      </form>
+    </section>
+
+    <section class="section result-panel" id="result" hidden>
+      <div class="section-title"><p class="eyebrow">MISSION RECEIPT</p><h2>Wynik kontrolowanego przepływu</h2></div>
+      <div class="result-grid" id="result-grid"></div>
+      <pre class="result-json"><code id="result-json"></code></pre>
+    </section>
+
+    <section class="section references">
+      <div class="section-title row-title">
+        <div><p class="eyebrow">20 REFERENCE SYSTEMS</p><h2>Z najlepszych wzorców, bez licencyjnego chaosu.</h2></div>
+        <span id="repo-count">ŁADOWANIE…</span>
+      </div>
+      <div class="repo-grid" id="repo-grid"></div>
+    </section>
+  </main>
+
+  <footer>
+    <span>SHERLOCK OSA // APACHE-2.0</span>
+    <span>TRUTH BEFORE CONFIDENCE</span>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <script src="/assets/app.js" defer></script>
+</body>
+</html>

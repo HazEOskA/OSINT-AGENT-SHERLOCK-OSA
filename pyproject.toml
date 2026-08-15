@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sherlock-osa"
+version = "0.1.0"
+description = "Controlled, evidence-first agent security laboratory powered by OSA Execution Force Engine."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+authors = [
+  { name = "Bartosz Osinski (Osa)" },
+]
+keywords = ["osint", "cyber-range", "security", "agents", "evidence", "sandbox"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Security",
+]
+dependencies = []
+
+[project.scripts]
+sherlock-osa = "sherlock_osa.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/HazEOskA/OSINT-AGENT-SHERLOCK-OSA"
+Repository = "https://github.com/HazEOskA/OSINT-AGENT-SHERLOCK-OSA"
+Issues = "https://github.com/HazEOskA/OSINT-AGENT-SHERLOCK-OSA/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+sherlock_osa = ["web/*.html", "web/*.css", "web/*.js", "reference_repos.json"]

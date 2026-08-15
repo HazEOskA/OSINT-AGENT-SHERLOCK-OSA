@@ -1,0 +1,25 @@
+services:
+  sherlock-osa:
+    build: .
+    init: true
+    read_only: true
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      SHERLOCK_HOST: 0.0.0.0
+      SHERLOCK_DATABASE_PATH: /var/lib/sherlock/sherlock-osa.db
+      SHERLOCK_EVIDENCE_PATH: /var/lib/sherlock/evidence.jsonl
+    ports:
+      - "127.0.0.1:8787:8787"
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+    volumes:
+      - sherlock-data:/var/lib/sherlock
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  sherlock-data:

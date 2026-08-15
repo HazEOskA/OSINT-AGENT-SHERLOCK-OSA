@@ -1,0 +1,14 @@
+{
+  "goal": "Sprawdź przepływ policy i evidence dla Juice Shop w izolowanym labie",
+  "mode": "LAB_RANGE",
+  "targets": [
+    {
+      "kind": "LAB_ASSET",
+      "value": "lab://juice-shop",
+      "ports": [3000]
+    }
+  ],
+  "allowed_capabilities": ["lab.http.probe"],
+  "ttl_minutes": 30,
+  "operator_id": "osa"
+}
