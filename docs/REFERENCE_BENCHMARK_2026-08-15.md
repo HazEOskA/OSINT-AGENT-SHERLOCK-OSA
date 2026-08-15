@@ -1,58 +1,49 @@
-# Reference benchmark — 2026-08-15
+# OSINT reference benchmark — 2026-08-15
 
-To jest kuratorowany benchmark dopasowania architektonicznego, nie obiektywny
-ranking całego GitHuba. Metadane, aktywność i licencje sprawdzono bezpośrednio w
-repozytoriach 2026-08-15. Liczba gwiazdek jest snapshotem, nie miarą jakości.
+To jest kuratorowany benchmark dopasowania do Sherlock OSA, nie obiektywny
+ranking GitHuba. Istnienie repo, aktywność, liczba gwiazdek i deklarowana
+licencja zostały sprawdzone przez GitHub API 2026-08-15. Gwiazdki są snapshotem.
 
-| # | Repo | Plane / wzorzec | ★ snapshot | Licencja | Decyzja v0.1 |
+| # | Repo | Główna domena | ★ | Licencja | Wzorzec użyty w OSA |
 |---:|---|---|---:|---|---|
-| 1 | [vxcontrol/pentagi](https://github.com/vxcontrol/pentagi) | multi-agent pentest, monitoring, persistence | 21,833 | MIT | wzorzec supervision; bez kopiowania |
-| 2 | [GreyDGL/PentestGPT](https://github.com/GreyDGL/PentestGPT) | staged pipeline, resume, walkthrough | 14,866 | MIT | wzorzec session state |
-| 3 | [microsoft/PyRIT](https://github.com/microsoft/PyRIT) | AI red-team scenarios, scoring, memory | 4,304 | MIT | wzorzec scenario/eval |
-| 4 | [0x4m4/hexstrike-ai](https://github.com/0x4m4/hexstrike-ai) | MCP tool gateway | 11,016 | MIT | katalog adapterów; nie uruchamiamy v0.1 |
-| 5 | [OWASP/Nettacker](https://github.com/OWASP/Nettacker) | modular scanner, drift, API/UI | 5,507 | Apache-2.0 | wzorzec modułów i raportów |
-| 6 | [apache/caldera](https://github.com/apache/caldera) | adversary emulation, plugin model | 7,190 | Apache-2.0 | wzorzec range operation |
-| 7 | [owasp-amass/amass](https://github.com/owasp-amass/amass) | attack-surface mapping | 14,983 | Apache-2.0 | przyszły passive adapter |
-| 8 | [sherlock-project/sherlock](https://github.com/sherlock-project/sherlock) | username OSINT | 89,549 | MIT | przyszły passive adapter |
-| 9 | [soxoj/maigret](https://github.com/soxoj/maigret) | dossier, graph, report formats | 36,777 | MIT | wzorzec entity evidence |
-| 10 | [smicallef/spiderfoot](https://github.com/smicallef/spiderfoot) | 200+ OSINT modules, correlations | 21,053 | MIT | wzorzec plugin graph |
-| 11 | [intelowlproject/IntelOwl](https://github.com/intelowlproject/IntelOwl) | analyzers/connectors, async jobs | 4,667 | AGPL-3.0 | API inspiration only |
-| 12 | [OpenCTI-Platform/opencti](https://github.com/OpenCTI-Platform/opencti) | CTI graph and connectors | 9,810 | Community Apache-2.0; mixed repo | concept/API only; per-file review |
-| 13 | [MISP/MISP](https://github.com/MISP/MISP) | CTI exchange, workflow, RBAC, audit | 6,473 | AGPL-3.0 | external API only |
-| 14 | [wazuh/wazuh](https://github.com/wazuh/wazuh) | XDR/SIEM endpoint telemetry | 16,529 | GPL-2.0 + exception text | future external adapter |
-| 15 | [zeek/zeek](https://github.com/zeek/zeek) | network telemetry and PCAP analysis | 7,875 | BSD-style | future blue-plane adapter |
-| 16 | [Orange-Cyberdefense/GOAD](https://github.com/Orange-Cyberdefense/GOAD) | disposable AD lab as code | 8,194 | GPL-3.0 | future range target, isolated |
-| 17 | [juice-shop/juice-shop](https://github.com/juice-shop/juice-shop) | vulnerable web training target | 13,668 | MIT | first planned lab target |
-| 18 | [rapid7/metasploitable3](https://github.com/rapid7/metasploitable3) | vulnerable VM factory | 5,667 | BSD-3-Clause + third parties | future range target |
-| 19 | [firecracker-microvm/firecracker](https://github.com/firecracker-microvm/firecracker) | microVM lifecycle/isolation | 36,076 | Apache-2.0 | planned security boundary |
-| 20 | [google/gvisor](https://github.com/google/gvisor) | userspace application kernel | 19,088 | Apache-2.0 | planned defence-in-depth |
+| 1 | [OpenOSINT/OpenOSINT](https://github.com/OpenOSINT/OpenOSINT) | agent | 1,410 | MIT | agentowy dobór narzędzi do typów identyfikatorów |
+| 2 | [smicallef/spiderfoot](https://github.com/smicallef/spiderfoot) | framework | 21,073 | MIT | moduły, korelacja, Tor i graf encji |
+| 3 | [sherlock-project/sherlock](https://github.com/sherlock-project/sherlock) | username | 89,586 | MIT | enumeracja publicznych kont |
+| 4 | [soxoj/maigret](https://github.com/soxoj/maigret) | username | 36,788 | MIT | profil, rekurencyjne pivoty i dossier |
+| 5 | [sundowndev/phoneinfoga](https://github.com/sundowndev/phoneinfoga) | telefon | 17,504 | GPL-3.0 | normalizacja i pasywne plany wyszukiwania |
+| 6 | [megadose/holehe](https://github.com/megadose/holehe) | e-mail | 13,073 | GPL-3.0 | sygnały rejestracji kont dla e-maila |
+| 7 | [mxrch/GHunt](https://github.com/mxrch/GHunt) | e-mail | 19,368 | AGPL-3.0 | moduły publicznego footprintu Google |
+| 8 | [lanmaster53/recon-ng](https://github.com/lanmaster53/recon-ng) | framework | 5,851 | GPL-3.0 | workspaces, klucze i powtarzalne moduły |
+| 9 | [owasp-amass/amass](https://github.com/owasp-amass/amass) | domeny | 14,983 | Apache-2.0 | pasywne mapowanie powierzchni zasobów |
+| 10 | [WebBreacher/WhatsMyName](https://github.com/WebBreacher/WhatsMyName) | username data | 2,762 | CC-BY-SA-4.0 | utrzymywany katalog detekcji profili |
+| 11 | [XposedOrNot/XposedOrNot-API](https://github.com/XposedOrNot/XposedOrNot-API) | wycieki | 90 | MIT | otwarte API metadanych ekspozycji |
+| 12 | [khast3x/h8mail](https://github.com/khast3x/h8mail) | wycieki | 5,250 | BSD-3-Clause | wiele źródeł breach lookup dla e-maila |
+| 13 | [alpkeskin/mosint](https://github.com/alpkeskin/mosint) | e-mail | 5,990 | MIT | modularne zapytania e-mail OSINT |
+| 14 | [qeeqbox/social-analyzer](https://github.com/qeeqbox/social-analyzer) | SOCMINT | 23,759 | AGPL-3.0 | szeroki katalog profili i API/CLI/UI |
+| 15 | [megadose/ignorant](https://github.com/megadose/ignorant) | telefon | 2,010 | GPL-3.0 | sygnały rejestracji kont dla telefonu |
+| 16 | [ahmia/ahmia-crawler](https://github.com/ahmia/ahmia-crawler) | Dark Web | 228 | BSD-3-Clause | crawler i pipeline indeksu Tor |
+| 17 | [apurvsinghgautam/robin](https://github.com/apurvsinghgautam/robin) | Dark Web agent | 6,315 | MIT | filtrowanie wyników i raport śledztwa |
+| 18 | [biolds/sosse](https://github.com/biolds/sosse) | crawler | 409 | AGPL-3.0 | self-hosted crawl, archiwum i harmonogram |
+| 19 | [Te-k/harpoon](https://github.com/Te-k/harpoon) | threat intel | 1,288 | GPL-3.0 | rejestr źródeł i zunifikowany CLI |
+| 20 | [Datalux/Osintgram](https://github.com/Datalux/Osintgram) | SOCMINT | 14,000 | GPL-3.0 | interaktywny workflow badania username |
 
-## Synthesis
+## Jak wynik benchmarku wpłynął na v0.2
 
-| Problem | Pattern adopted | Source references |
+| Problem | Przyjęty wzorzec | Implementacja |
 |---|---|---|
-| Agent can be wrong | deterministic out-of-model broker | OSA Engine, PyRIT |
-| Large tool catalogue | typed adapter manifest with explicit backing | HexStrike, Nettacker, IntelOwl |
-| Long-running missions | persisted state and replay | PentAGI, PentestGPT, Caldera |
-| Correlation | entity/evidence graph later, not raw LLM memory | Maigret, SpiderFoot, OpenCTI, MISP |
-| Range safety | non-addressable `lab://` targets + disposable IaC | GOAD, Juice Shop, Metasploitable3 |
-| Defender learning | capture telemetry for the same mission | Wazuh, Zeek |
-| Hostile worker | microVM boundary plus optional userspace kernel | Firecracker, gVisor |
+| różne typy identyfikatorów | agentowy router OpenOSINT | deterministyczny registry 10 typed skills |
+| setki potencjalnych źródeł | moduły SpiderFoot/Recon-ng | adaptery ze wspólnym `AdapterResult` i niezależnym statusem |
+| false positives osoby | dossier Maigret | kandydat ma `CANDIDATE_REQUIRES_CORRELATION` |
+| wycieki | XposedOrNot/h8mail | zwracamy źródła/metadane, nigdy hasła ani raw rows |
+| telefon | PhoneInfoga | E.164, kraj, precyzyjne pivoty; owner/carrier nie są zgadywane |
+| Dark Web | Ahmia/Robin | index match oddzielony od weryfikacji treści przez Tor |
+| odtwarzalność | Recon-ng/SpiderFoot | plan, trace i per-request evidence hash-chain |
 
-## Licence rule
+## Zasada licencyjna
 
-No source from these repositories is included in v0.1. MIT/Apache/BSD projects
-may become optional adapters after a dependency review. GPL/AGPL components must
-remain separate processes unless a deliberate licence decision says otherwise.
-Mixed/source-available repositories require per-file or API-boundary review.
+Repo z MIT/Apache/BSD mogą zostać biblioteką dopiero po osobnym przeglądzie
+zależności. GPL/AGPL i zewnętrzne datasety pozostają osobnymi procesami/API lub
+inspiracją interfejsu. W v0.2 żaden z 20 projektów nie jest vendorowany.
 
-## Considered but rejected as the open-source code base
-
-- `aliasrobotics/cai`: repository licence combines MIT-derived components with
-  proprietary research-only additions and prohibits commercial/production use
-  without another licence.
-- `Security-Onion-Solutions/securityonion`: ELv2 is source-available and limits
-  hosted/managed service use; useful architecture reference, not an open-source
-  dependency claim.
-- `TheHive-Project/TheHive`: the inspected repository is archived and describes
-  the current distribution as commercial.
+Repo bez jednoznacznego pliku licencji nie zostały wpisane do głównej
+dwudziestki, nawet jeśli technicznie były interesujące.

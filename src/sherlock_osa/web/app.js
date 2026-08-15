@@ -3,9 +3,10 @@
 const $ = (selector) => document.querySelector(selector);
 const state = {
   deploymentMode: "UNKNOWN",
-  lastMission: null,
-  lastDecision: null,
-  lastBundle: null,
+  capabilities: null,
+  lastResult: null,
+  progressTimer: null,
+  progressStarted: 0,
 };
 
 function toast(message, error = false) {
@@ -13,7 +14,8 @@ function toast(message, error = false) {
   element.textContent = message;
   element.classList.toggle("error", error);
   element.hidden = false;
-  window.setTimeout(() => { element.hidden = true; }, 5000);
+  window.clearTimeout(element.dismissTimer);
+  element.dismissTimer = window.setTimeout(() => { element.hidden = true; }, 6000);
 }
 
 function token() {
@@ -22,12 +24,14 @@ function token() {
   return value || sessionStorage.getItem("sherlock_api_key") || "";
 }
 
-async function api(path, options = {}, auth = true) {
-  const headers = { "Accept": "application/json", ...(options.headers || {}) };
+async function api(path, options = {}, auth = false) {
+  const headers = { Accept: "application/json", ...(options.headers || {}) };
   if (options.body) headers["Content-Type"] = "application/json";
   if (auth) headers.Authorization = `Bearer ${token()}`;
   const response = await fetch(path, { ...options, headers });
-  const body = await response.json().catch(() => ({ error: { code: "INVALID_RESPONSE", message: "Niepoprawna odpowiedź API" } }));
+  const body = await response.json().catch(() => ({
+    error: { code: "INVALID_RESPONSE", message: "Źródło zwróciło niepoprawną odpowiedź." },
+  }));
   if (!response.ok) {
     const error = new Error(body.error?.message || `HTTP ${response.status}`);
     error.code = body.error?.code || "HTTP_ERROR";
@@ -36,239 +40,307 @@ async function api(path, options = {}, auth = true) {
   return body;
 }
 
-function field(form, name) { return form.elements.namedItem(name).value.trim(); }
+function field(form, name) {
+  const element = form.elements.namedItem(name);
+  return element ? String(element.value).trim() : "";
+}
 
-function missionPayload(form) {
-  const mode = field(form, "mode");
-  const portRaw = field(form, "port");
-  const ports = portRaw && mode !== "RESEARCH_PASSIVE" ? [Number(portRaw)] : [];
+function investigationPayload(form) {
   return {
-    goal: field(form, "goal"),
-    mode,
-    targets: [{ kind: field(form, "target_kind"), value: field(form, "target_value"), ports }],
-    allowed_capabilities: [field(form, "capability")],
-    ttl_minutes: Number(field(form, "ttl_minutes")),
-    operator_id: field(form, "operator_id"),
+    query: field(form, "query"),
+    kind: field(form, "kind"),
+    default_region: field(form, "default_region"),
+    purpose: field(form, "purpose"),
+    include_darkweb: form.elements.namedItem("include_darkweb").checked,
+    consent: form.elements.namedItem("consent").checked,
   };
 }
 
-function routeFor(mode) {
-  return {
-    LAB_RANGE: "range-only",
-    RESEARCH_PASSIVE: "research-passive",
-    AUTHORIZED_EXTERNAL: "external-allowlist",
-  }[mode];
-}
-
-function renderResult(bundle) {
-  const panel = $("#result");
-  const mission = bundle.mission?.mission || {};
-  const decision = bundle.decision?.decision || {};
-  const receipt = bundle.execution?.receipt || {};
-  const replay = bundle.replay || {};
-  const isPublicReplay = bundle.deployment_mode === "PUBLIC_REPLAY_DEMO";
-  const facts = [
-    ["ENGINE", isPublicReplay ? "REPLAY VECTOR" : (mission.engine_state || "UNKNOWN")],
-    ["POLICY", decision.effect || "UNKNOWN"],
-    ["NETWORK EFFECT", String(receipt.network_effect_performed ?? "UNKNOWN").toUpperCase()],
-    ["REPLAY", replay.valid === true ? "VALID" : "UNKNOWN"],
+function startProgress() {
+  const progress = $("#agent-progress");
+  const labels = [
+    "Resolver dobiera skille…",
+    "Uruchamiam źródła pasywne…",
+    "Sprawdzam indeks dark web…",
+    "Koreluję ustalenia i kandydatów…",
+    "Buduję evidence ledger…",
   ];
-  const grid = $("#result-grid");
-  grid.replaceChildren(...facts.map(([label, value]) => {
-    const article = document.createElement("article");
-    const span = document.createElement("span");
-    const strong = document.createElement("strong");
-    span.textContent = label;
-    strong.textContent = value;
-    article.append(span, strong);
-    return article;
-  }));
-  $("#result-json").textContent = JSON.stringify(bundle, null, 2);
-  panel.hidden = false;
-  panel.scrollIntoView({ behavior: "smooth", block: "start" });
+  progress.hidden = false;
+  state.progressStarted = performance.now();
+  let index = 0;
+  const update = () => {
+    const elapsed = (performance.now() - state.progressStarted) / 1000;
+    $("#progress-time").textContent = `${elapsed.toFixed(1).padStart(4, "0")}s`;
+    index = Math.min(labels.length - 1, Math.floor(elapsed / 1.7));
+    $("#progress-label").textContent = labels[index];
+    document.querySelectorAll(".progress-steps span").forEach((item, itemIndex) => {
+      item.classList.toggle("active", itemIndex <= index);
+    });
+  };
+  update();
+  state.progressTimer = window.setInterval(update, 100);
 }
 
-async function runFlow(event) {
+function stopProgress() {
+  window.clearInterval(state.progressTimer);
+  state.progressTimer = null;
+  $("#agent-progress").hidden = true;
+}
+
+function textElement(tag, className, value) {
+  const element = document.createElement(tag);
+  if (className) element.className = className;
+  element.textContent = String(value ?? "");
+  return element;
+}
+
+function externalLink(label, url, className = "") {
+  const link = textElement("a", className, label);
+  link.href = url;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  return link;
+}
+
+function renderSummary(summary) {
+  const items = [
+    ["USTALENIA", summary.finding_count ?? 0],
+    ["ŹRÓDŁA WYCIEKU", summary.breach_source_count ?? 0],
+    ["DARK WEB MATCH", summary.darkweb_match_count ?? summary.darkweb_index_match_count ?? 0],
+    ["LIVE CONFIRMED", summary.live_confirmed_count ?? 0],
+    ["ŹRÓDŁA ZAKOŃCZONE", summary.sources_completed ?? 0],
+  ];
+  $("#summary-grid").replaceChildren(...items.map(([label, value]) => {
+    const card = document.createElement("article");
+    card.append(textElement("span", "", label), textElement("strong", "", value));
+    return card;
+  }));
+}
+
+function metadataLabels(metadata) {
+  if (!metadata || typeof metadata !== "object") return [];
+  const priority = ["country", "region", "calling_code", "public_repos", "created_at", "entity_id"];
+  const keys = [...priority, ...Object.keys(metadata)].filter((value, index, array) => array.indexOf(value) === index);
+  return keys.flatMap((key) => {
+    const value = metadata[key];
+    if (value === null || value === undefined || value === "" || typeof value === "object") return [];
+    return [`${key}: ${value}`];
+  }).slice(0, 5);
+}
+
+function renderFindings(findings) {
+  $("#finding-count").textContent = `${findings.length}`;
+  if (!findings.length) {
+    $("#finding-list").replaceChildren(textElement(
+      "p",
+      "empty-state",
+      "Brak potwierdzonych ustaleń z dostępnych źródeł. To nie jest dowód braku ekspozycji — sprawdź status adapterów w trace.",
+    ));
+    return;
+  }
+  const initials = {
+    BREACH_EXPOSURE: "BR",
+    DARKWEB_INDEX_MATCH: "DW",
+    DARKWEB_CONTENT_MATCH: "TOR",
+    PUBLIC_PROFILE: "ID",
+    PERSON_CANDIDATE: "?",
+    PHONE_METADATA: "TEL",
+    DNS_ADDRESS: "DNS",
+    REVERSE_DNS: "PTR",
+    RDAP_RECORD: "RD",
+  };
+  const nodes = findings.map((finding) => {
+    const article = document.createElement("article");
+    article.className = "finding";
+    article.append(textElement("span", "finding-icon", initials[finding.category] || "OS"));
+    const main = document.createElement("div");
+    main.className = "finding-main";
+    main.append(textElement("h4", "", finding.title), textElement("p", "", finding.value));
+    const meta = document.createElement("div");
+    meta.className = "finding-meta";
+    const labels = [
+      finding.source,
+      finding.verification,
+      `confidence: ${finding.confidence}`,
+      ...metadataLabels(finding.metadata),
+    ];
+    meta.replaceChildren(...labels.map((label) => textElement("span", "", label)));
+    main.append(meta);
+    article.append(main);
+    if (finding.source_url) article.append(externalLink("ŹRÓDŁO ↗", finding.source_url, "finding-link"));
+    return article;
+  });
+  $("#finding-list").replaceChildren(...nodes);
+}
+
+function renderPivots(pivots) {
+  $("#pivot-count").textContent = `${pivots.length}`;
+  if (!pivots.length) {
+    $("#pivot-list").replaceChildren(textElement("p", "empty-state", "Brak dodatkowych pivotów dla tego typu zapytania."));
+    return;
+  }
+  const nodes = pivots.map((pivot) => {
+    const link = externalLink("", pivot.url, "pivot");
+    link.append(textElement("span", "", pivot.label), textElement("b", "", "↗"));
+    return link;
+  });
+  $("#pivot-list").replaceChildren(...nodes);
+}
+
+function renderTrace(trace) {
+  const uniqueSkills = new Set(trace.map((entry) => entry.skill_id));
+  $("#skill-count").textContent = `${uniqueSkills.size} SKILLS`;
+  const nodes = trace.map((entry) => {
+    const item = document.createElement("li");
+    const line = document.createElement("div");
+    line.className = "trace-line";
+    line.append(textElement("b", "", entry.skill_id));
+    line.append(textElement("span", `trace-status ${String(entry.status).toLowerCase()}`, entry.status));
+    item.append(line);
+    item.append(textElement("p", "", entry.message));
+    item.append(textElement(
+      "small",
+      "",
+      `${entry.adapter_id} // ${entry.duration_ms ?? 0}ms // network=${String(Boolean(entry.network_effect)).toUpperCase()}`,
+    ));
+    return item;
+  });
+  $("#trace-list").replaceChildren(...nodes);
+}
+
+function renderResult(result) {
+  state.lastResult = result;
+  const query = result.query || {};
+  const summary = result.summary || {};
+  $("#result-title").textContent = `${query.kind || "QUERY"}: ${query.masked || "—"}`;
+  $("#result-subtitle").textContent = `ID ${result.investigation_id} // ${result.deployment_mode} // ${result.created_at}`;
+  const risk = String(summary.risk || "UNKNOWN");
+  const riskBadge = $("#risk-badge");
+  riskBadge.className = `risk-badge ${risk.toLowerCase()}`;
+  riskBadge.querySelector("b").textContent = risk;
+  renderSummary(summary);
+  renderFindings(result.findings || []);
+  renderPivots(result.pivots || []);
+  renderTrace(result.execution_trace || []);
+  const verification = result.evidence?.verification || {};
+  $("#ledger-status").textContent = verification.valid ? `VALID // ${verification.record_count}` : "INVALID";
+  $("#evidence-json").textContent = JSON.stringify({
+    verification,
+    records: result.evidence?.records || [],
+    truth: result.truth || {},
+  }, null, 2);
+  $("#result").hidden = false;
+  $("#result").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function runInvestigation(event) {
   event.preventDefault();
   const form = event.currentTarget;
-  const button = form.querySelector("button[type=submit]");
+  const button = $("#submit-search");
   button.disabled = true;
-  button.textContent = state.deploymentMode === "PUBLIC_REPLAY_DEMO"
-    ? "WERYFIKACJA PUBLICZNEGO REPLAYU…"
-    : "WYKONYWANIE KONTROLOWANEGO FLOW…";
+  button.querySelector("span").textContent = "AGENT PRACUJE…";
+  startProgress();
   try {
-    const payload = missionPayload(form);
-    if (state.deploymentMode === "PUBLIC_REPLAY_DEMO") {
-      const bundle = await api(
-        "/api/v1/demo/replay",
-        { method: "POST", body: JSON.stringify(payload) },
-        false,
-      );
-      state.lastBundle = bundle;
-      renderResult(bundle);
-      toast("Replay VALID. Live Engine i efekty sieciowe nie zostały uruchomione.");
-      return;
-    }
-    const missionResponse = await api("/api/v1/missions", { method: "POST", body: JSON.stringify(payload) });
-    const mission = missionResponse.mission;
-    state.lastMission = mission;
-    const capability = payload.allowed_capabilities[0];
-    const needsPort = ["lab.http.probe", "lab.network.scan", "external.http.probe", "external.network.scan"].includes(capability);
-    const decisionPayload = {
-      mission_id: mission.mission_id,
-      capability,
-      target: payload.targets[0],
-      route: routeFor(payload.mode),
-      port: needsPort ? payload.targets[0].ports[0] : null,
-      request_id: crypto.randomUUID(),
-    };
-    const decisionResponse = await api("/api/v1/decisions", { method: "POST", body: JSON.stringify(decisionPayload) });
-    state.lastDecision = decisionResponse.decision;
-    let executionResponse = { receipt: { status: "NOT_EXECUTED" } };
-    if (decisionResponse.decision.effect === "ALLOW") {
-      executionResponse = await api("/api/v1/executions/simulate", {
-        method: "POST",
-        body: JSON.stringify({ decision_id: decisionResponse.decision.decision_id }),
-      });
-    }
-    const replayResponse = await api(`/api/v1/missions/${mission.mission_id}/replay`, {
-      method: "POST", body: "{}",
-    });
-    const bundle = { mission: missionResponse, decision: decisionResponse, execution: executionResponse, replay: replayResponse };
-    state.lastBundle = bundle;
-    renderResult(bundle);
-    toast("Flow zakończony. Sprawdź receipt i replay.");
+    const result = await api(
+      "/api/v1/osint/investigate",
+      { method: "POST", body: JSON.stringify(investigationPayload(form)) },
+      state.deploymentMode === "PRIVATE_CONTROL_PLANE",
+    );
+    renderResult(result);
+    toast(`Gotowe: ${result.summary.finding_count} ustaleń, ledger ${result.evidence.verification.valid ? "VALID" : "INVALID"}.`);
   } catch (error) {
     toast(`${error.code || "ERROR"}: ${error.message}`, true);
   } finally {
+    stopProgress();
     button.disabled = false;
-    button.textContent = state.deploymentMode === "PUBLIC_REPLAY_DEMO"
-      ? "REPLAY VECTOR → BROKER → EVIDENCE"
-      : "ENGINE → SIGN → DECIDE → SIMULATE";
+    button.querySelector("span").textContent = "URUCHOM AGENTA";
   }
 }
 
-function configurePublicReplay() {
-  const apiKeyField = $("#api-key-field");
-  const apiKey = $("#api-key");
-  apiKeyField.hidden = true;
-  apiKey.required = false;
-
-  const form = $("#mission-form");
-  const mode = form.elements.namedItem("mode");
-  const targetKind = form.elements.namedItem("target_kind");
-  const ttl = form.elements.namedItem("ttl_minutes");
-  mode.value = "LAB_RANGE";
-  mode.disabled = true;
-  targetKind.value = "LAB_ASSET";
-  targetKind.disabled = true;
-  ttl.max = "60";
-  if (Number(ttl.value) > 60) ttl.value = "30";
-
-  const demoCapabilities = new Set([
-    "lab.http.probe",
-    "lab.network.scan",
-    "lab.attack.simulate",
-    "blue.telemetry.replay",
-  ]);
-  const capabilitySelect = form.elements.namedItem("capability");
-  for (const option of capabilitySelect.options) {
-    option.disabled = !demoCapabilities.has(option.value);
-  }
-
-  const replaySteps = [
-    "Load bundled OSA receipt vector",
-    "HMAC demo scope",
-    "Capability decision",
-    "Simulation + evidence",
-    "Deterministic replay",
-  ];
-  document.querySelectorAll(".flow-list li span").forEach((element, index) => {
-    element.textContent = replaySteps[index];
+function renderSkills(capabilities) {
+  const skills = capabilities.skills || [];
+  $("#skills-status").textContent = `${skills.length} SKILLS // ${capabilities.registry || "REGISTRY"}`;
+  const cards = skills.map((skill) => {
+    const card = document.createElement("article");
+    card.className = "skill-card";
+    const top = document.createElement("div");
+    top.className = "skill-top";
+    top.append(textElement("code", "", skill.id), textElement("span", "", skill.effect));
+    card.append(top, textElement("h3", "", skill.title), textElement("p", "", skill.description));
+    const adapters = document.createElement("div");
+    adapters.className = "skill-adapters";
+    adapters.replaceChildren(...(skill.adapters || []).map((adapter) => textElement("span", "", adapter)));
+    card.append(adapters);
+    return card;
   });
-
-  $("#deployment-mode").classList.add("online");
-  $("#deployment-mode").innerHTML = "<i></i> PUBLIC REPLAY";
-  $("#mission-intro").textContent =
-    "Publiczny deploy odtwarza jawnie oznaczony wektor receiptu OSA przez prawdziwy podpis, broker, worker symulacyjny i hash-chain. Nie wywołuje live Engine, sieci ani shella.";
-  $("#submit-flow").textContent = "REPLAY VECTOR → BROKER → EVIDENCE";
-  $("#form-note").textContent =
-    "Tryb publiczny jest stateless i LAB-only. Nowe misje wykonawcze wymagają prywatnego runtime połączonego z OSA Engine.";
+  $("#skill-grid").replaceChildren(...cards);
+  const leakcheck = capabilities.providers?.["leakcheck.v2"];
+  if (leakcheck === "READY") {
+    const source = $("#leakcheck-source");
+    source.querySelector(".source-dot").className = "source-dot live";
+    source.querySelector("small").textContent = "telefon / wycieki — ready";
+  }
 }
 
-async function loadStatus() {
+async function loadStatusAndSkills() {
   try {
-    const health = await api("/api/v1/health", {}, false);
-    state.deploymentMode = health.deployment_mode || "PRIVATE_CONTROL_PLANE";
+    const [health, capabilities] = await Promise.all([
+      api("/api/v1/health"),
+      api("/api/v1/osint/capabilities"),
+    ]);
+    state.deploymentMode = health.deployment_mode || "UNKNOWN";
+    state.capabilities = capabilities;
     const status = $("#service-status");
     status.classList.add("online");
-    status.innerHTML = state.deploymentMode === "PUBLIC_REPLAY_DEMO"
-      ? "<i></i> DEMO ONLINE"
-      : "<i></i> API ONLINE";
-    if (state.deploymentMode === "PUBLIC_REPLAY_DEMO") configurePublicReplay();
-    if (health.status !== "OK") status.textContent = `API ${health.status}`;
-  } catch {
+    status.replaceChildren(document.createElement("i"), document.createTextNode(" ONLINE"));
+    $("#deployment-mode").textContent = state.deploymentMode === "PUBLIC_PASSIVE_OSINT" ? "PUBLIC PASSIVE" : "PRIVATE OSA";
+    const privateRuntime = state.deploymentMode === "PRIVATE_CONTROL_PLANE";
+    $("#api-key-field").hidden = !privateRuntime;
+    $("#api-key").required = privateRuntime;
+    renderSkills(capabilities);
+  } catch (error) {
     $("#service-status").textContent = "API OFFLINE";
+    $("#skills-status").textContent = "REGISTRY UNAVAILABLE";
   }
 }
 
 async function loadReferences() {
   try {
-    const result = await api("/api/v1/reference-repos", {}, false);
+    const result = await api("/api/v1/reference-repos");
     const repos = result.repositories || [];
-    $("#repo-count").textContent = `${repos.length} REPO // SNAPSHOT ${result.captured_at.slice(0, 10)}`;
+    $("#repo-count").textContent = `${repos.length} REPO // ${String(result.captured_at || "").slice(0, 10)}`;
     const cards = repos.map((repo) => {
       const card = document.createElement("article");
       card.className = "repo";
-      const link = document.createElement("a");
-      link.href = repo.url;
-      link.target = "_blank";
-      link.rel = "noreferrer";
-      link.textContent = repo.name;
-      const description = document.createElement("p");
-      description.textContent = repo.pattern;
+      card.append(externalLink(repo.name, repo.url));
+      card.append(textElement("p", "", repo.pattern));
       const meta = document.createElement("div");
       meta.className = "repo-meta";
-      const plane = document.createElement("span");
-      const license = document.createElement("b");
-      plane.textContent = repo.plane;
-      license.textContent = repo.license;
-      meta.append(plane, license);
-      card.append(link, description, meta);
+      meta.append(textElement("span", "", repo.plane), textElement("b", "", repo.license));
+      card.append(meta);
       return card;
     });
     $("#repo-grid").replaceChildren(...cards);
-  } catch (error) {
+  } catch {
     $("#repo-count").textContent = "BENCHMARK UNAVAILABLE";
   }
 }
 
-async function verifyLedger() {
-  if (state.deploymentMode === "PUBLIC_REPLAY_DEMO") {
-    const verification = state.lastBundle?.evidence?.verification;
-    if (!verification) {
-      toast("Najpierw uruchom publiczny replay — ledger powstaje i jest sprawdzany per request.");
-      return;
-    }
-    toast(
-      verification.valid
-        ? `Ledger VALID // ${verification.record_count} rekordów // ${verification.head_hash.slice(0, 12)}…`
-        : `Ledger INVALID: ${(verification.errors || []).join(", ")}`,
-      !verification.valid,
-    );
-    return;
-  }
-  try {
-    const result = await api("/api/v1/evidence/verify");
-    toast(result.valid ? `Ledger VALID // ${result.record_count} rekordów // ${result.head_hash.slice(0, 12)}…` : `Ledger INVALID: ${result.errors.join(", ")}`, !result.valid);
-  } catch (error) {
-    toast(`${error.code || "ERROR"}: ${error.message}`, true);
-  }
-}
+const placeholders = {
+  AUTO: "email@domena.pl, +48 500 000 000, Jan Kowalski…",
+  EMAIL: "nazwa@domena.pl",
+  PHONE: "+48 500 000 000",
+  PERSON: "Jan Kowalski",
+  USERNAME: "username",
+  DOMAIN: "domena.pl",
+  IP: "203.0.113.10",
+};
 
+$("#query-kind").addEventListener("change", (event) => {
+  $("#query-input").placeholder = placeholders[event.target.value] || placeholders.AUTO;
+});
+$("#osint-form").addEventListener("submit", runInvestigation);
 const savedToken = sessionStorage.getItem("sherlock_api_key");
 if (savedToken) $("#api-key").value = savedToken;
-$("#mission-form").addEventListener("submit", runFlow);
-$("#verify-ledger").addEventListener("click", verifyLedger);
-loadStatus();
+loadStatusAndSkills();
 loadReferences();

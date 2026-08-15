@@ -15,7 +15,7 @@ from tests.support import build_test_service, lab_payload
 class ApiTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = TemporaryDirectory()
-        self.service, _ = build_test_service(Path(self.temp.name))
+        self.service, self.engine = build_test_service(Path(self.temp.name))
         self.server = create_server(self.service, "127.0.0.1", 0)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -46,20 +46,26 @@ class ApiTests(unittest.TestCase):
     def test_public_health_and_reference_benchmark(self) -> None:
         status, health = self.request("GET", "/api/v1/health", auth=False)
         self.assertEqual(status, 200)
-        self.assertEqual(health["execution_backing"], "SIMULATION_ONLY")
+        self.assertEqual(
+            health["execution_backing"],
+            "ENGINE_GATED_PASSIVE_OSINT_AND_LAB_SIMULATION",
+        )
         self.assertEqual(health["deployment_mode"], "PRIVATE_CONTROL_PLANE")
         status, benchmark = self.request("GET", "/api/v1/reference-repos", auth=False)
         self.assertEqual(status, 200)
         self.assertEqual(len(benchmark["repositories"]), 20)
+        status, capabilities = self.request("GET", "/api/v1/osint/capabilities", auth=False)
+        self.assertEqual(status, 200)
+        self.assertEqual(len(capabilities["skills"]), 10)
 
     def test_static_panel_and_assets_are_served_with_security_headers(self) -> None:
         status, headers, body = self.request_bytes("/")
         self.assertEqual(status, 200)
         self.assertIn(b"SHERLOCK OSA", body)
-        self.assertIn(b'id="mission-form"', body)
+        self.assertIn(b'id="osint-form"', body)
         self.assertIn("frame-ancestors 'none'", headers["Content-Security-Policy"])
         self.assertEqual(headers["X-Frame-Options"], "DENY")
-        for path, marker in (("/assets/styles.css", b"--green"), ("/assets/app.js", b"runFlow")):
+        for path, marker in (("/assets/styles.css", b"--green"), ("/assets/app.js", b"runInvestigation")):
             asset_status, _, asset_body = self.request_bytes(path)
             self.assertEqual(asset_status, 200)
             self.assertIn(marker, asset_body)
@@ -70,6 +76,26 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, 401)
         body = json.loads(raised.exception.read())
         self.assertEqual(body["error"]["code"], "UNAUTHORIZED")
+
+    def test_private_osint_execution_requires_bearer_and_runs_skills(self) -> None:
+        payload = {
+            "query": "+48 500 600 700",
+            "kind": "PHONE",
+            "default_region": "PL",
+            "purpose": "SELF_AUDIT",
+            "include_darkweb": False,
+            "consent": True,
+        }
+        with self.assertRaises(urllib.error.HTTPError) as raised:
+            self.request("POST", "/api/v1/osint/investigate", payload, auth=False)
+        self.assertEqual(raised.exception.code, 401)
+        status, result = self.request("POST", "/api/v1/osint/investigate", payload)
+        self.assertEqual(status, 200)
+        self.assertEqual(result["query"]["kind"], "PHONE")
+        self.assertTrue(result["evidence"]["verification"]["valid"])
+        self.assertEqual(result["osa_engine"]["engine_state"], "COMPLETED")
+        self.assertEqual(self.engine.calls[-1]["mission_family"], "PASSIVE_OSINT")
+        self.assertNotIn("+48500600700", json.dumps(self.engine.calls[-1]))
 
     def test_live_http_vertical_slice(self) -> None:
         _, created = self.request("POST", "/api/v1/missions", lab_payload())

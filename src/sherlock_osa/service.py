@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 from importlib.resources import files
@@ -26,6 +27,7 @@ from sherlock_osa.contracts import (
 from sherlock_osa.engine import EngineGateway
 from sherlock_osa.errors import EngineError, SherlockError
 from sherlock_osa.evidence import EvidenceLedger
+from sherlock_osa.osint import OsintAgent, prepare_investigation
 from sherlock_osa.policy import CapabilityBroker, validate_scope_definition
 from sherlock_osa.signing import redact, sha256_json, sign_scope, verify_scope
 from sherlock_osa.storage import MissionStore
@@ -34,6 +36,7 @@ from sherlock_osa.worker import ADAPTERS, SimulationWorker
 
 class MissionService:
     deployment_mode = "PRIVATE_CONTROL_PLANE"
+    public_osint_access = False
 
     def __init__(
         self,
@@ -51,6 +54,7 @@ class MissionService:
         self.engine = engine
         self.broker = broker
         self.worker = worker
+        self.osint_agent = OsintAgent()
 
     def health(self, *, probe_engine: bool = False) -> dict[str, object]:
         ledger = self.ledger.verify()
@@ -72,7 +76,7 @@ class MissionService:
             "version": __version__,
             "status": "OK" if ledger.valid else "DEGRADED",
             "deployment_mode": self.deployment_mode,
-            "execution_backing": "SIMULATION_ONLY",
+            "execution_backing": "ENGINE_GATED_PASSIVE_OSINT_AND_LAB_SIMULATION",
             "engine": dict(engine),
             "evidence": ledger.to_dict(),
         }
@@ -86,6 +90,91 @@ class MissionService:
             "default": "DENY",
             "adapters": [adapter.to_dict() for adapter in ADAPTERS],
         }
+
+    def osint_capabilities(self) -> dict[str, object]:
+        return self.osint_agent.capabilities()
+
+    def osint_investigate(self, raw: object) -> dict[str, object]:
+        prepared = prepare_investigation(raw)
+        query_sha = hashlib.sha256(prepared.query.normalized.encode("utf-8")).hexdigest()
+        skills = self.osint_agent.registry.resolve(
+            prepared.query.kind,
+            include_darkweb=prepared.include_darkweb,
+        )
+        local_mission_id = str(uuid4())
+        draft = {
+            "mission_id": local_mission_id,
+            "mission_family": "PASSIVE_OSINT",
+            "goal": f"Passive OSINT {prepared.purpose} for hashed {prepared.query.kind.value} subject",
+            "mode": "RESEARCH_PASSIVE",
+            "targets": [
+                {
+                    "kind": "OSINT_SUBJECT_HASH",
+                    "value": f"sha256:{query_sha}",
+                    "ports": [],
+                }
+            ],
+            "allowed_capabilities": [skill.skill_id for skill in skills],
+            "operator_id": "authenticated-osint-operator",
+            "ttl_minutes": 15,
+            "requirements": {
+                "purpose": prepared.purpose,
+                "consent": True,
+                "include_darkweb": prepared.include_darkweb,
+                "raw_identifier_forwarded_to_engine": False,
+            },
+        }
+        try:
+            receipt = self.engine.run_mission(draft)
+        except EngineError as exc:
+            self.ledger.append(
+                "OSINT_ENGINE_CALL_FAILED",
+                {
+                    "mission_id": local_mission_id,
+                    "query_sha256": query_sha,
+                    "query_kind": prepared.query.kind.value,
+                    "error_code": exc.code,
+                },
+            )
+            raise
+        safe_receipt = redact(dict(receipt.body))
+        receipt_sha = sha256_json(safe_receipt)
+        self.ledger.append(
+            "OSINT_ENGINE_RECEIPT_RECORDED",
+            {
+                "mission_id": local_mission_id,
+                "query_sha256": query_sha,
+                "query_kind": prepared.query.kind.value,
+                "engine_mission_id": receipt.mission_id,
+                "engine_execution_id": receipt.execution_id,
+                "engine_state": receipt.state,
+                "engine_receipt_sha256": receipt_sha,
+                "raw_identifier_persisted": False,
+            },
+        )
+        if receipt.state != "COMPLETED":
+            raise EngineError(
+                "OSINT_ENGINE_NOT_COMPLETED",
+                "OSA Engine nie zakończył misji stanem COMPLETED; adaptery nie zostały uruchomione.",
+                status=409,
+            )
+        execution_context = {
+            "engine_state": receipt.state,
+            "engine_mission_id": receipt.mission_id,
+            "engine_execution_id": receipt.execution_id,
+            "engine_receipt_sha256": receipt_sha,
+        }
+        report = self.osint_agent.run_prepared(
+            prepared,
+            execution_context=execution_context,
+        )
+        report["osa_engine"] = {
+            **execution_context,
+            "engine_commit_sha": self.settings.engine_commit_sha,
+            "raw_identifier_forwarded": False,
+            "authorization": "COMPLETED_RECEIPT_REQUIRED",
+        }
+        return report
 
     def create_mission(self, raw: object) -> dict[str, object]:
         data = require_mapping(raw, field_name="mission")

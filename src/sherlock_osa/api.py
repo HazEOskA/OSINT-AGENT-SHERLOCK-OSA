@@ -25,7 +25,7 @@ ASSETS = {
 
 def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
-        server_version = "SherlockOSA/0.1.1"
+        server_version = "SherlockOSA/0.2.0"
         sys_version = ""
 
         def log_message(self, format_string: str, *args: object) -> None:
@@ -129,6 +129,9 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
             if path == "/api/v1/reference-repos":
                 self._json(200, service.reference_repositories())
                 return
+            if path == "/api/v1/osint/capabilities":
+                self._json(200, service.osint_capabilities())
+                return
             self._require_auth()
             if path == "/api/v1/capabilities":
                 self._json(200, service.capabilities())
@@ -155,6 +158,11 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
                 if not callable(demo_replay):
                     raise SherlockError("NOT_FOUND", "Endpoint nie istnieje.", status=404)
                 self._json(200, demo_replay(self._body_json()))
+                return
+            if path == "/api/v1/osint/investigate":
+                if not bool(getattr(service, "public_osint_access", False)):
+                    self._require_auth()
+                self._json(200, service.osint_investigate(self._body_json()))
                 return
             self._require_auth()
             if path == "/api/v1/missions":

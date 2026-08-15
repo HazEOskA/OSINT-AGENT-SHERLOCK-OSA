@@ -4,148 +4,176 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <title>Sherlock OSA — Controlled Agent Security Lab</title>
+  <meta name="description" content="Sherlock OSA — agentowy biały wywiad po e-mailu, telefonie, osobie, username, domenie i IP.">
+  <title>Sherlock OSA — agentowy biały wywiad</title>
   <link rel="stylesheet" href="/assets/styles.css">
 </head>
 <body>
-  <div class="noise" aria-hidden="true"></div>
   <header class="topbar">
-    <a class="brand" href="#top" aria-label="Sherlock OSA">
-      <span class="brand-mark">S//O</span>
-      <span><strong>SHERLOCK OSA</strong><small>CONTROLLED AGENT SECURITY LAB</small></span>
+    <a class="brand" href="#top" aria-label="Sherlock OSA — strona główna">
+      <span class="brand-mark" aria-hidden="true">S</span>
+      <span><strong>SHERLOCK OSA</strong><small>AGENTOWY BIAŁY WYWIAD</small></span>
     </a>
-    <div class="status-row">
-      <span class="pill pill-green"><i></i> DEFAULT DENY</span>
-      <span class="pill" id="deployment-mode"><i></i> RUNTIME</span>
-      <span class="pill" id="service-status"><i></i> ŁĄCZENIE</span>
+    <div class="status-row" aria-label="Status usługi">
+      <span class="status-chip" id="deployment-mode">RUNTIME</span>
+      <span class="status-chip status-live" id="service-status"><i></i> ŁĄCZENIE</span>
     </div>
   </header>
 
   <main id="top">
     <section class="hero">
       <div class="hero-copy">
-        <p class="eyebrow">EVIDENCE BEFORE EXECUTION // v0.1.1</p>
-        <h1>Nie ufaj agentowi.<br><em>Ogranicz jego świat.</em></h1>
-        <p class="lead">OSA Engine prowadzi misję. Deterministyczny broker blokuje wszystko,
-          czego nie ma w podpisanym scope. Każda decyzja trafia do weryfikowalnego ledgeru.</p>
-        <div class="hero-actions">
-          <a class="button primary" href="#mission">Utwórz misję testową</a>
-          <button class="button ghost" id="verify-ledger" type="button">Zweryfikuj ledger</button>
+        <p class="eyebrow">OPEN SOURCE // OSINT SKILL ENGINE // v0.2.0</p>
+        <h1>Jedno zapytanie.<br><em>Cała powierzchnia ekspozycji.</em></h1>
+        <p class="lead">Sprawdź e-mail, numer telefonu, imię i nazwisko, username, domenę albo IP.
+          Agent dobiera skille, odpytuje dostępne źródła, oddziela fakty od kandydatów i pokazuje pełny trace.</p>
+      </div>
+      <aside class="truth-card" aria-label="Zakres publicznego runtime">
+        <span class="truth-label">CO DZIAŁA W TYM RUNTIME</span>
+        <ul>
+          <li><i class="ok"></i><span>live breach check e-mail</span></li>
+          <li><i class="ok"></i><span>telefon E.164 + provider hook</span></li>
+          <li><i class="ok"></i><span>profile, Wikidata, DNS i RDAP</span></li>
+          <li><i class="ok"></i><span>Ahmia — indeks dark web</span></li>
+          <li><i class="locked"></i><span>crawl .onion — prywatny Tor worker</span></li>
+        </ul>
+      </aside>
+    </section>
+
+    <section class="search-shell" id="search">
+      <div class="search-heading">
+        <div>
+          <p class="eyebrow">NOWE DOCHODZENIE</p>
+          <h2>Co sprawdzamy?</h2>
         </div>
-      </div>
-      <div class="scope-card">
-        <div class="scope-head"><span>MISSION_SCOPE</span><b>FAIL-CLOSED</b></div>
-        <pre><code>{
-  "mode": "LAB_RANGE",
-  "target": "lab://juice-shop",
-  "capability": "lab.http.probe",
-  "route": "range-only",
-  "network_effect": false
-}</code></pre>
-        <div class="scope-foot"><span>ENGINE PIN</span><code>f365360…ce38d</code></div>
-      </div>
-    </section>
-
-    <section class="metrics" aria-label="Status systemu">
-      <article><span>ROUTER</span><strong>OSA ENGINE</strong><small>jedyny router intencji</small></article>
-      <article><span>POLICY</span><strong>OUT-OF-MODEL</strong><small>deterministyczny broker</small></article>
-        <article><span>EXECUTION</span><strong>SIMULATION</strong><small>zero efektu sieciowego v0.1.1</small></article>
-      <article><span>EVIDENCE</span><strong>SHA-256</strong><small>append + replay</small></article>
-    </section>
-
-    <section class="section architecture">
-      <div class="section-title">
-        <p class="eyebrow">TRUST ZONES</p>
-        <h2>Jedna misja. Cztery rozdzielone płaszczyzny.</h2>
-      </div>
-      <div class="zone-grid">
-        <article class="zone active"><span class="zone-no">01</span><h3>Control</h3><p>Engine, scope, podpis, approval i kill-switch.</p><small>PRIVATE RUNTIME + PUBLIC REPLAY</small></article>
-        <article class="zone"><span class="zone-no">02</span><h3>Research</h3><p>Pasywne źródła przez wymuszoną trasę, bez swobodnego egressu.</p><small>UNBACKED</small></article>
-        <article class="zone"><span class="zone-no">03</span><h3>Range</h3><p>Disposable targety, worker microVM i wyłącznie route range-only.</p><small>UNBACKED</small></article>
-        <article class="zone"><span class="zone-no">04</span><h3>Blue + Evidence</h3><p>Telemetria tej samej misji, patch, replay i retest.</p><small>LEDGER BACKED</small></article>
-      </div>
-    </section>
-
-    <section class="section mission-layout" id="mission">
-      <div class="mission-copy">
-        <p class="eyebrow">SAFE VERTICAL SLICE</p>
-        <h2>Utwórz podpisany scope</h2>
-        <p id="mission-intro">Panel najpierw wysyła intencję do OSA Engine. Dopiero receipt Engine zostaje
-          związany z lokalnym targetem i podpisany. W v0.1.1 zatwierdzona operacja nadal
-          kończy się wyłącznie symulacją.</p>
-        <ol class="flow-list">
-          <li><b>01</b><span>Engine resolve + run</span></li>
-          <li><b>02</b><span>HMAC mission scope</span></li>
-          <li><b>03</b><span>Capability decision</span></li>
-          <li><b>04</b><span>Simulation + evidence</span></li>
-          <li><b>05</b><span>Deterministic replay</span></li>
-        </ol>
+        <span class="privacy-note">Publiczny preview nie zapisuje surowego zapytania</span>
       </div>
 
-      <form class="mission-form" id="mission-form">
-        <label id="api-key-field">Klucz operatora
-          <input id="api-key" name="api_key" type="password" autocomplete="off" placeholder="SHERLOCK_API_KEY" required>
+      <form id="osint-form" class="osint-form">
+        <label class="api-key-field" id="api-key-field" hidden>Klucz operatora
+          <input id="api-key" name="api_key" type="password" autocomplete="off" placeholder="SHERLOCK_API_KEY">
         </label>
-        <label>Cel misji
-          <textarea name="goal" rows="3" required>Sprawdź przepływ policy i evidence dla Juice Shop w izolowanym labie</textarea>
-        </label>
-        <div class="form-row">
-          <label>Tryb
-            <select name="mode">
-              <option value="LAB_RANGE">LAB_RANGE</option>
-              <option value="RESEARCH_PASSIVE">RESEARCH_PASSIVE</option>
-              <option value="AUTHORIZED_EXTERNAL">AUTHORIZED_EXTERNAL — BLOCKED</option>
-            </select>
-          </label>
-          <label>TTL (min)
-            <input name="ttl_minutes" type="number" min="1" max="1440" value="30" required>
-          </label>
-        </div>
-        <div class="form-row">
-          <label>Typ targetu
-            <select name="target_kind">
-              <option value="LAB_ASSET">LAB_ASSET</option>
+
+        <div class="query-row">
+          <label class="kind-field"><span>Typ</span>
+            <select name="kind" id="query-kind">
+              <option value="AUTO">AUTO</option>
+              <option value="EMAIL">E-MAIL</option>
+              <option value="PHONE">TELEFON</option>
+              <option value="PERSON">IMIĘ I NAZWISKO</option>
               <option value="USERNAME">USERNAME</option>
-              <option value="DOMAIN">DOMAIN</option>
-              <option value="INDICATOR">INDICATOR</option>
+              <option value="DOMAIN">DOMENA</option>
+              <option value="IP">ADRES IP</option>
             </select>
           </label>
-          <label>Target
-            <input name="target_value" value="lab://juice-shop" required>
+          <label class="query-field"><span>Identyfikator</span>
+            <input id="query-input" name="query" type="text" maxlength="253"
+              placeholder="email@domena.pl, +48 500 000 000, Jan Kowalski…" required autocomplete="off" spellcheck="false">
           </label>
+          <button class="primary-button" id="submit-search" type="submit">
+            <span>URUCHOM AGENTA</span><b aria-hidden="true">→</b>
+          </button>
         </div>
-        <div class="form-row">
-          <label>Capability
-            <select name="capability">
-              <option value="lab.http.probe">lab.http.probe</option>
-              <option value="lab.network.scan">lab.network.scan</option>
-              <option value="lab.attack.simulate">lab.attack.simulate</option>
-              <option value="blue.telemetry.replay">blue.telemetry.replay</option>
-              <option value="osint.username.lookup">osint.username.lookup</option>
-              <option value="osint.domain.passive">osint.domain.passive</option>
+
+        <div class="options-row">
+          <label>Region telefonu
+            <select name="default_region">
+              <option value="PL">PL +48</option>
+              <option value="GB">GB +44</option>
+              <option value="DE">DE +49</option>
+              <option value="NL">NL +31</option>
+              <option value="FR">FR +33</option>
+              <option value="US">US/CA +1</option>
+              <option value="UA">UA +380</option>
             </select>
           </label>
-          <label>Port
-            <input name="port" type="number" min="1" max="65535" value="3000">
+          <label>Cel dochodzenia
+            <select name="purpose">
+              <option value="SELF_AUDIT">Audyt własnej ekspozycji</option>
+              <option value="CONSENTED_RESEARCH">Research za zgodą</option>
+              <option value="JOURNALISM_PUBLIC_INTEREST">Interes publiczny / dziennikarstwo</option>
+              <option value="CORPORATE_DEFENSE">Obrona organizacji</option>
+            </select>
+          </label>
+          <label class="check-option">
+            <input name="include_darkweb" type="checkbox" checked>
+            <span><b>Dark-web index</b><small>Ahmia + status Tor workera</small></span>
+          </label>
+          <label class="check-option consent-option">
+            <input name="consent" type="checkbox" required>
+            <span><b>Mam legalny cel</b><small>i uprawnienie do researchu</small></span>
           </label>
         </div>
-        <label>Operator ID
-          <input name="operator_id" value="osa" required>
-        </label>
-        <button class="button primary full" id="submit-flow" type="submit">ENGINE → SIGN → DECIDE → SIMULATE</button>
-        <p class="form-note" id="form-note">Żaden skaner ani shell nie zostanie uruchomiony w tym release.</p>
       </form>
+
+      <div class="agent-progress" id="agent-progress" hidden aria-live="polite">
+        <div class="progress-head"><span id="progress-label">Resolver dobiera skille…</span><b id="progress-time">00.0s</b></div>
+        <div class="progress-track"><i></i></div>
+        <div class="progress-steps">
+          <span class="active">KLASYFIKACJA</span><span>ŹRÓDŁA</span><span>DARK WEB</span><span>KORELACJA</span><span>EVIDENCE</span>
+        </div>
+      </div>
     </section>
 
-    <section class="section result-panel" id="result" hidden>
-      <div class="section-title"><p class="eyebrow">MISSION RECEIPT</p><h2>Wynik kontrolowanego przepływu</h2></div>
-      <div class="result-grid" id="result-grid"></div>
-      <pre class="result-json"><code id="result-json"></code></pre>
+    <section class="source-strip" aria-label="Źródła i workery">
+      <div><span class="source-dot live"></span><b>XposedOrNot</b><small>e-mail breach</small></div>
+      <div><span class="source-dot live"></span><b>GitHub / Wikidata</b><small>profile i osoba</small></div>
+      <div><span class="source-dot live"></span><b>DNS / RDAP</b><small>domena i IP</small></div>
+      <div><span class="source-dot live"></span><b>Ahmia</b><small>dark-web index</small></div>
+      <div id="leakcheck-source"><span class="source-dot config"></span><b>LeakCheck</b><small>telefon / wycieki</small></div>
+      <div><span class="source-dot worker"></span><b>Tor + CLI workers</b><small>private runtime</small></div>
     </section>
 
-    <section class="section references">
-      <div class="section-title row-title">
-        <div><p class="eyebrow">20 REFERENCE SYSTEMS</p><h2>Z najlepszych wzorców, bez licencyjnego chaosu.</h2></div>
+    <section class="results" id="result" hidden>
+      <div class="result-header">
+        <div>
+          <p class="eyebrow">RAPORT DOCHODZENIA</p>
+          <h2 id="result-title">Wynik</h2>
+          <p id="result-subtitle"></p>
+        </div>
+        <div class="risk-badge" id="risk-badge"><span>RISK</span><b>UNKNOWN</b></div>
+      </div>
+
+      <div class="summary-grid" id="summary-grid"></div>
+
+      <div class="result-layout">
+        <div class="result-main">
+          <section class="panel findings-panel">
+            <div class="panel-head"><h3>Ustalenia</h3><span id="finding-count">0</span></div>
+            <div class="finding-list" id="finding-list"></div>
+          </section>
+
+          <section class="panel pivot-panel">
+            <div class="panel-head"><h3>Pivoty do dalszego researchu</h3><span id="pivot-count">0</span></div>
+            <div class="pivot-list" id="pivot-list"></div>
+          </section>
+        </div>
+
+        <aside class="result-side">
+          <section class="panel trace-panel">
+            <div class="panel-head"><h3>Skill execution trace</h3><span id="skill-count">0 SKILLS</span></div>
+            <ol class="trace-list" id="trace-list"></ol>
+          </section>
+
+          <details class="panel evidence-panel">
+            <summary><span>Evidence ledger</span><b id="ledger-status">UNKNOWN</b></summary>
+            <pre><code id="evidence-json"></code></pre>
+          </details>
+        </aside>
+      </div>
+    </section>
+
+    <section class="skills-section" id="skills">
+      <div class="section-heading">
+        <div><p class="eyebrow">SKILL REGISTRY</p><h2>Agent nie udaje narzędzi. Uruchamia kontrakty.</h2></div>
+        <span id="skills-status">ŁADOWANIE…</span>
+      </div>
+      <div class="skill-grid" id="skill-grid"></div>
+    </section>
+
+    <section class="references-section">
+      <div class="section-heading">
+        <div><p class="eyebrow">20 OPEN-SOURCE REFERENCES</p><h2>Benchmark wyłącznie OSINT, identity i dark web.</h2></div>
         <span id="repo-count">ŁADOWANIE…</span>
       </div>
       <div class="repo-grid" id="repo-grid"></div>
@@ -153,8 +181,8 @@
   </main>
 
   <footer>
-    <span>SHERLOCK OSA v0.1.1 // APACHE-2.0</span>
-    <span>TRUTH BEFORE CONFIDENCE</span>
+    <span>SHERLOCK OSA v0.2.0 // APACHE-2.0</span>
+    <span>FAKTY ≠ KANDYDACI // RAW CREDENTIALS: NEVER</span>
   </footer>
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>

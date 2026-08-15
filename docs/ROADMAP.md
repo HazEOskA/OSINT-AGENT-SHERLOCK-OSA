@@ -1,44 +1,40 @@
 # Roadmap
 
-## v0.1 — control-plane proof
+## v0.2 — OSINT core (current)
 
-- signed mission, deterministic broker, simulation, evidence, replay, UI;
-- OSA Engine HTTP adapter;
-- zero real security-tool execution.
+- e-mail, telefon, osoba, username, domena i IP;
+- 10 typed OSINT skills i deterministyczny resolver;
+- live passive adapters + metadata-only breach reporting;
+- Ahmia index z prawidłowym verification state;
+- Engine-gated private Tor worker, fixed argv i network separation;
+- per-request SHA-256 evidence;
+- OSINT-first panel i 20-repo benchmark.
 
-## v0.1.1 — public replay preview
+## v0.2.1 — public preview hardening
 
-- stateless Vercel Python Function;
-- bundled OSA receipt test vector z jawnym `live_engine_called=false`;
-- real signer, broker, simulation worker i per-request hash-chain;
-- brak sekretów, egressu i publicznego Attack Range.
+- per-IP/operator rate limit i budżet providerów;
+- privacy notice per source i jawna zgoda na przekazanie query;
+- provider circuit breakers i cache wyłącznie negatywnych capability checks;
+- metryki błędów bez PII.
 
-## v0.2 — isolated lab worker
+## v0.3 — isolated CLI workers
 
-- osobny worker host;
-- typed adapter registry and idempotency;
-- only `lab://` asset resolution inside an isolated range network;
-- Juice Shop adapter followed by Zeek telemetry;
-- kill switch and resource quotas;
-- destructive tests only on disposable fixtures.
+- osobne procesy dla Sherlock, Maigret, WhatsMyName, PhoneInfoga i Amass;
+- adapter manifest z wersją obrazu, licencją, timeoutem i output schema;
+- kolejka zadań, idempotency key, cancel/kill switch;
+- szyfrowany case store z konfigurowalnym retention;
+- graf encji z ręcznym zatwierdzaniem relacji.
 
-## v0.3 — research plane
-
-- passive-only OSINT adapters;
-- Tor gateway enforced by network namespace, not prompt;
-- source provenance and rate limits;
-- PII minimisation and retention controls.
-
-## v0.4 — microVM boundary
+## v0.4 — stronger isolation
 
 - Firecracker lifecycle controller;
-- gVisor defence-in-depth where compatible;
-- signed immutable worker images;
-- escape drills and independent validation.
+- gVisor jako defense-in-depth tam, gdzie kompatybilny;
+- podpisane immutable worker images i SBOM;
+- testy ucieczki oraz niezależna walidacja sieci.
 
-## v0.5 — authorised external
+## v0.5 — authorised external assets
 
-- DNS/HTTP ownership challenge verifier;
-- exact FQDN/IP/port allowlist with short expiry;
-- separate approval binding and emergency stop;
-- policy/legal review before enablement.
+- DNS/HTTP ownership challenge;
+- dokładna allowlista FQDN/IP/port z krótkim expiry;
+- osobna approval binding i emergency stop;
+- przegląd prawny/policy przed włączeniem aktywnych kontroli.

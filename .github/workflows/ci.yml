@@ -26,3 +26,5 @@ jobs:
         run: python scripts/smoke.py
       - name: Smoke public replay
         run: python scripts/smoke_demo.py
+      - name: Smoke OSINT skill runner
+        run: python scripts/smoke_osint.py

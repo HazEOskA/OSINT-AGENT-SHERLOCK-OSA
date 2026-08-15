@@ -39,7 +39,7 @@ def main() -> int:
     }
     print(json.dumps(summary, indent=2))
     expected = {
-        "deployment_mode": "PUBLIC_REPLAY_DEMO",
+        "deployment_mode": "PUBLIC_PASSIVE_OSINT",
         "decision": "ALLOW",
         "replay_valid": True,
         "ledger_valid": True,
