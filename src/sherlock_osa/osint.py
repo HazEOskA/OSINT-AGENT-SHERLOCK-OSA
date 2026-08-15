@@ -683,7 +683,7 @@ class LeakCheckAdapter:
                 self.adapter_id,
                 self.skill_id,
                 AdapterStatus.REQUIRES_CONFIGURATION,
-                "Wyszukiwanie wycieków telefonu/username wymaga LEAKCHECK_API_KEY.",
+                "Wyszukiwanie wycieków e-mail/telefon/username wymaga LEAKCHECK_API_KEY.",
                 False,
                 False,
             )
