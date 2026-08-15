@@ -13,5 +13,10 @@ from sherlock_osa.api import handler_factory  # noqa: E402
 from sherlock_osa.demo import PublicDemoService  # noqa: E402
 
 
-# Vercel's Python runtime discovers the exported BaseHTTPRequestHandler class.
-handler = handler_factory(PublicDemoService())
+# Vercel's builder discovers a top-level class named ``handler`` through static
+# analysis; exporting a class through a plain assignment is not sufficient.
+_BaseHandler = handler_factory(PublicDemoService())
+
+
+class handler(_BaseHandler):
+    pass
