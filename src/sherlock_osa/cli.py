@@ -10,13 +10,13 @@ from sherlock_osa.engine import OsaEngineClient
 from sherlock_osa.errors import SherlockError
 from sherlock_osa.evidence import EvidenceLedger
 from sherlock_osa.policy import CapabilityBroker
-from sherlock_osa.service import MissionService
+from sherlock_osa.research_service import ResearchMissionService
 from sherlock_osa.storage import MissionStore
 from sherlock_osa.worker import SimulationWorker
 
 
-def build_service(settings: Settings) -> MissionService:
-    return MissionService(
+def build_service(settings: Settings) -> ResearchMissionService:
+    return ResearchMissionService(
         settings=settings,
         store=MissionStore(settings.database_path),
         ledger=EvidenceLedger(settings.evidence_path),
