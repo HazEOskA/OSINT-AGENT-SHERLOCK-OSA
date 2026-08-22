@@ -25,11 +25,10 @@ ASSETS = {
 
 def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
-        server_version = "SherlockOSA/0.1.1"
+        server_version = "SherlockOSA/0.2.0"
         sys_version = ""
 
         def log_message(self, format_string: str, *args: object) -> None:
-            # Never log headers or request bodies; stdlib access-line fields only.
             super().log_message(format_string, *args)
 
         def _security_headers(self) -> None:
@@ -55,6 +54,19 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
         def _json(self, status: int, payload: object) -> None:
             body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
             self._send_bytes(status, body, "application/json; charset=utf-8")
+
+        def _start_sse(self) -> None:
+            self.send_response(200)
+            self._security_headers()
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Connection", "close")
+            self.end_headers()
+
+        def _sse(self, event: str, payload: object) -> None:
+            body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+            frame = f"event: {event}\ndata: {body}\n\n".encode("utf-8")
+            self.wfile.write(frame)
+            self.wfile.flush()
 
         def _authorised(self) -> bool:
             expected = f"Bearer {service.settings.api_key}"
@@ -166,9 +178,39 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
             if path == "/api/v1/executions/simulate":
                 self._json(201, service.simulate(self._body_json()))
                 return
+            if path == "/api/v1/research":
+                research = getattr(service, "research", None)
+                if not callable(research):
+                    raise SherlockError("RESEARCH_UNAVAILABLE", "Research service nie jest podpięty.", status=503)
+                self._json(200, research(self._body_json()))
+                return
+            if path == "/api/v1/research/stream":
+                research = getattr(service, "research", None)
+                if not callable(research):
+                    raise SherlockError("RESEARCH_UNAVAILABLE", "Research service nie jest podpięty.", status=503)
+                body = self._body_json()
+                self._start_sse()
+                try:
+                    summary = research(body, event_sink=self._sse)
+                    self._sse(
+                        "session_summary",
+                        {
+                            "mission_id": summary.get("mission_id"),
+                            "purge": summary.get("purge"),
+                        },
+                    )
+                except SherlockError as exc:
+                    self._sse("error", exc.as_dict())
+                except Exception:
+                    self._sse(
+                        "error",
+                        {"error": {"code": "INTERNAL_ERROR", "message": "Błąd wewnętrzny."}},
+                    )
+                finally:
+                    self.close_connection = True
+                return
             match = REPLAY_PATH.fullmatch(path)
             if match:
-                # Require an explicit JSON object even though replay has no free parameters.
                 body = self._body_json()
                 if not isinstance(body, dict) or body:
                     raise SherlockError("EMPTY_OBJECT_REQUIRED", "Replay body musi być pustym obiektem JSON.")
