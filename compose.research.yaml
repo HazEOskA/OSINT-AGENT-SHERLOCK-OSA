@@ -1,0 +1,89 @@
+services:
+  sherlock-osa:
+    build: .
+    init: true
+    read_only: true
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      SHERLOCK_HOST: 0.0.0.0
+      SHERLOCK_DATABASE_PATH: /var/lib/sherlock/sherlock-osa.db
+      SHERLOCK_EVIDENCE_PATH: /var/lib/sherlock/evidence.jsonl
+      OSA_RESEARCH_WORKER_URL: http://research-worker:8790
+    ports:
+      - "127.0.0.1:8787:8787"
+    networks:
+      - control-plane
+      - control-egress
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+    volumes:
+      - sherlock-data:/var/lib/sherlock
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    depends_on:
+      research-worker:
+        condition: service_healthy
+
+  research-worker:
+    build:
+      context: .
+      dockerfile: docker/research-worker.Dockerfile
+    init: true
+    read_only: true
+    restart: unless-stopped
+    environment:
+      OSA_RESEARCH_WORKER_TOKEN: ${OSA_RESEARCH_WORKER_TOKEN:?set OSA_RESEARCH_WORKER_TOKEN}
+      TOR_SOCKS_PROXY: socks5h://tor-gateway:9050
+    networks:
+      - control-plane
+      - tor-lane
+    tmpfs:
+      - /tmp:size=32m,noexec,nosuid,nodev
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 64
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8790/healthz', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+    depends_on:
+      tor-gateway:
+        condition: service_started
+
+  tor-gateway:
+    build:
+      context: .
+      dockerfile: docker/tor.Dockerfile
+    read_only: true
+    restart: unless-stopped
+    networks:
+      - tor-lane
+      - tor-egress
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid,nodev
+      - /var/lib/tor:size=64m,nosuid,nodev
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 64
+    mem_limit: 192m
+
+networks:
+  control-plane:
+    internal: true
+  tor-lane:
+    internal: true
+  control-egress: {}
+  tor-egress: {}
+
+volumes:
+  sherlock-data:

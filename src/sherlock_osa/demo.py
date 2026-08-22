@@ -24,6 +24,7 @@ from sherlock_osa.contracts import (
 )
 from sherlock_osa.errors import SherlockError
 from sherlock_osa.evidence import EvidenceLedger
+from sherlock_osa.osint import OsintAgent
 from sherlock_osa.policy import CapabilityBroker, PORT_CAPABILITIES, validate_scope_definition
 from sherlock_osa.signing import sha256_json, sign_scope, verify_scope
 from sherlock_osa.worker import SimulationWorker
@@ -51,19 +52,20 @@ class PublicDemoSettings:
 
 
 class PublicDemoService:
-    """Stateless public replay mode for Vercel.
+    """Stateless public passive-OSINT mode for Vercel.
 
-    This service never calls an Engine endpoint and never performs a network or
-    shell effect. It replays a clearly labelled bundled OSA receipt test vector
-    through the real scope signer, Capability Broker, simulation worker and
-    evidence ledger in one request. New executable missions remain available
-    only in the private Engine-connected runtime.
+    The public endpoint runs only fixed-egress, passive adapters and stores no
+    investigation between requests. Direct .onion crawling, CLI enumerators and
+    provider keys remain in the private Engine-connected research plane. The old
+    replay endpoint stays available as a regression fixture, not as the product UI.
     """
 
-    deployment_mode = "PUBLIC_REPLAY_DEMO"
+    deployment_mode = "PUBLIC_PASSIVE_OSINT"
+    public_osint_access = True
 
     def __init__(self) -> None:
         self.settings = PublicDemoSettings()
+        self.osint_agent = OsintAgent()
 
     def health(self, *, probe_engine: bool = False) -> dict[str, object]:
         return {
@@ -71,9 +73,9 @@ class PublicDemoService:
             "version": __version__,
             "status": "OK",
             "deployment_mode": self.deployment_mode,
-            "execution_backing": "SIMULATION_ONLY",
+            "execution_backing": "LIVE_PASSIVE_FIXED_EGRESS",
             "engine": {
-                "reachable": "NOT_CALLED_IN_PUBLIC_REPLAY",
+                "reachable": "NOT_CALLED_IN_PUBLIC_OSINT",
                 "commit_sha": ENGINE_PIN,
                 "live_engine_required_for_new_missions": True,
             },
@@ -83,11 +85,19 @@ class PublicDemoService:
             },
             "truth": {
                 "live_engine_called": False,
-                "network_effect_possible": False,
+                "network_effect_possible": True,
                 "shell_effect_possible": False,
+                "tor_crawl_possible": False,
+                "raw_query_persisted": False,
                 "probe_engine_ignored": bool(probe_engine),
             },
         }
+
+    def osint_capabilities(self) -> dict[str, object]:
+        return self.osint_agent.capabilities()
+
+    def osint_investigate(self, raw: object) -> dict[str, object]:
+        return self.osint_agent.investigate(raw)
 
     def reference_repositories(self) -> dict[str, object]:
         resource = files("sherlock_osa").joinpath("reference_repos.json")

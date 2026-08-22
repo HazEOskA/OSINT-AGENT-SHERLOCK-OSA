@@ -24,7 +24,7 @@ class PublicDemoServiceTests(unittest.TestCase):
 
     def test_replay_runs_real_policy_worker_and_hash_chain_without_effects(self) -> None:
         result = self.service.public_demo_replay(lab_payload())
-        self.assertEqual(result["deployment_mode"], "PUBLIC_REPLAY_DEMO")
+        self.assertEqual(result["deployment_mode"], "PUBLIC_PASSIVE_OSINT")
         self.assertEqual(result["decision"]["decision"]["effect"], "ALLOW")
         self.assertTrue(result["replay"]["valid"])
         self.assertTrue(result["replay"]["scope_signature_valid"])
@@ -52,9 +52,10 @@ class PublicDemoServiceTests(unittest.TestCase):
 
     def test_health_tells_the_truth_about_public_runtime(self) -> None:
         health = self.service.health()
-        self.assertEqual(health["deployment_mode"], "PUBLIC_REPLAY_DEMO")
+        self.assertEqual(health["deployment_mode"], "PUBLIC_PASSIVE_OSINT")
         self.assertFalse(health["truth"]["live_engine_called"])
-        self.assertFalse(health["truth"]["network_effect_possible"])
+        self.assertTrue(health["truth"]["network_effect_possible"])
+        self.assertFalse(health["truth"]["tor_crawl_possible"])
 
 
 class PublicDemoHttpTests(unittest.TestCase):
@@ -85,12 +86,31 @@ class PublicDemoHttpTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertTrue(result["replay"]["valid"])
 
+    def test_public_phone_osint_runs_without_operator_secret(self) -> None:
+        status, result = self.request(
+            "POST",
+            "/api/v1/osint/investigate",
+            {
+                "query": "+48 500 600 700",
+                "kind": "PHONE",
+                "default_region": "PL",
+                "purpose": "SELF_AUDIT",
+                "include_darkweb": False,
+                "consent": True,
+            },
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(result["query"]["value"], "+48500600700")
+        self.assertTrue(result["evidence"]["verification"]["valid"])
+        skill_ids = {entry["skill_id"] for entry in result["execution_trace"]}
+        self.assertIn("osint.phone-intelligence", skill_ids)
+
     def test_vercel_route_marker_preserves_the_original_path(self) -> None:
         status, health = self.request(
             "GET", "/api/index.py?__osa_path=api/v1/health"
         )
         self.assertEqual(status, 200)
-        self.assertEqual(health["deployment_mode"], "PUBLIC_REPLAY_DEMO")
+        self.assertEqual(health["deployment_mode"], "PUBLIC_PASSIVE_OSINT")
         status, result = self.request(
             "POST",
             "/api/index.py?__osa_path=api/v1/demo/replay",

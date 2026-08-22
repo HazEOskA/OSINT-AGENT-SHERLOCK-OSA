@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from sherlock_osa.errors import SherlockError
+from sherlock_osa.errors import EngineError, SherlockError
 from tests.support import build_test_service, lab_payload
 
 
@@ -66,6 +66,28 @@ class ServiceTests(unittest.TestCase):
             repositories = service.reference_repositories()["repositories"]
             self.assertEqual(len(repositories), 20)
             self.assertEqual(len({repo["name"] for repo in repositories}), 20)
+
+    def test_osint_adapters_are_blocked_until_engine_completes(self) -> None:
+        with TemporaryDirectory() as directory:
+            service, engine = build_test_service(
+                Path(directory), engine_state="WAITING_FOR_APPROVAL"
+            )
+            with self.assertRaises(EngineError) as raised:
+                service.osint_investigate(
+                    {
+                        "query": "target@example.com",
+                        "kind": "EMAIL",
+                        "purpose": "SELF_AUDIT",
+                        "include_darkweb": True,
+                        "consent": True,
+                    }
+                )
+            self.assertEqual(raised.exception.code, "OSINT_ENGINE_NOT_COMPLETED")
+            serialized_draft = str(engine.calls[0])
+            self.assertNotIn("target@example.com", serialized_draft)
+            self.assertIn("sha256:", serialized_draft)
+            records = service.ledger.records()
+            self.assertEqual(records[-1]["event_type"], "OSINT_ENGINE_RECEIPT_RECORDED")
 
 
 if __name__ == "__main__":

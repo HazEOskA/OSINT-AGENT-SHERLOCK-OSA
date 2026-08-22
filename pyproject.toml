@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sherlock-osa"
-version = "0.1.1"
-description = "Controlled, evidence-first agent security laboratory powered by OSA Execution Force Engine."
+version = "0.2.0"
+description = "Skill-driven, evidence-first open-source OSINT agent for identity and exposure research."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "Apache-2.0"
@@ -32,4 +32,4 @@ Issues = "https://github.com/HazEOskA/OSINT-AGENT-SHERLOCK-OSA/issues"
 where = ["src"]
 
 [tool.setuptools.package-data]
-sherlock_osa = ["web/*.html", "web/*.css", "web/*.js", "reference_repos.json"]
+sherlock_osa = ["web/*.html", "web/*.css", "web/*.js", "reference_repos.json", "osint_skills.json"]

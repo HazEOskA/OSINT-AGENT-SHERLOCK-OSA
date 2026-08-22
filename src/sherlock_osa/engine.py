@@ -75,10 +75,14 @@ class OsaEngineClient:
     def run_mission(self, draft: Mapping[str, Any]) -> EngineMissionReceipt:
         targets = draft.get("targets", [])
         capabilities = draft.get("allowed_capabilities", [])
+        is_osint = draft.get("mission_family") == "PASSIVE_OSINT"
         payload = {
             "task": (
-                "Compile and govern a controlled security-lab mission using the capability broker; "
-                "missing scope evidence must block execution"
+                "Compile and govern a passive OSINT research mission; raw identifiers must not be "
+                "persisted in the Engine and direct .onion retrieval requires the isolated Tor worker"
+                if is_osint
+                else "Compile and govern a controlled security-lab mission using the capability "
+                "broker; missing scope evidence must block execution"
             ),
             "goal": str(draft.get("goal", "")),
             "context": {
@@ -89,6 +93,7 @@ class OsaEngineClient:
                     "default_deny=true",
                     "no_scope_evidence_means_no_execution=true",
                     "external_targets_require_independent_ownership_proof=true",
+                    f"raw_osint_identifier_forwarded={'false' if is_osint else 'not_applicable'}",
                 ],
                 "repository": "HazEOskA/osa-execution-force-skills",
                 "branch": "main",

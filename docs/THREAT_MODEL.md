@@ -1,42 +1,53 @@
-# Threat model v0.1
+# Threat model v0.2
 
 ## Chronione aktywa
 
-- klucz operatora i secret podpisujący misje;
-- API key OSA Engine;
-- niezmienność scope'u i evidence;
-- brak nieautoryzowanego efektu sieciowego;
-- prywatność targetów i wyników.
+- badany identyfikator i wyniki OSINT;
+- klucz operatora, Engine API key i token research workera;
+- poprawność planu skills i provenance findings;
+- niezmienność receiptu i evidence;
+- wymuszenie trasy Tor dla bezpośredniego `.onion`;
+- brak credentiali/raw breach rows w odpowiedzi.
 
 ## Zakładani przeciwnicy
 
-1. przejęty lub prompt-injected agent;
-2. operator UI z błędnym targetem;
-3. klient API próbujący rozszerzyć scope po podpisaniu;
-4. worker próbujący wykonać inną capability;
-5. proces modyfikujący ledger na dysku;
-6. złośliwy dependency lub projekt referencyjny.
+1. klient API próbujący użyć usługi do stalkingu lub masowego harvestingu;
+2. prompt-injected albo błędny agent;
+3. złośliwa strona `.onion` i parser-hostile HTML;
+4. provider zwracający niepoprawny lub ogromny payload;
+5. operator próbujący wstrzyknąć URL/flagę shella przez query;
+6. worker próbujący ominąć Tor;
+7. proces modyfikujący lokalny ledger;
+8. złośliwa zależność albo projekt benchmarkowy.
 
-## Kontrole v0.1
+## Kontrole v0.2
 
-| Zagrożenie | Kontrola | Pozostały status |
+| Zagrożenie | Kontrola | Status |
 |---|---|---|
-| Scope tampering | HMAC-SHA256 + constant-time verify | `MITIGATED_LOCAL` |
-| Target escape | exact typed target + exact ports | `MITIGATED_POLICY` |
-| Prompt injection | model nie podejmuje decyzji policy | `MITIGATED_POLICY` |
-| Public target w labie | tylko `lab://` | `MITIGATED_POLICY` |
-| External without ownership | hard deny | `MITIGATED_FAIL_CLOSED` |
-| Ledger edit | hash-chain verification | `DETECTABLE`, nie WORM |
-| Secret leakage | recursive redaction + env-only config | `PARTIAL` |
-| Host escape | brak hostile-code execution v0.1 | `NOT_EXPOSED` |
-| Supply chain | zero runtime dependencies | `REDUCED` |
+| brak podstawy prawnej | wymagane `purpose` + `consent` | `POLICY_GATE`, nie weryfikuje prawdziwości |
+| arbitralny egress publiczny | host allowlist w kliencie | `MITIGATED_APPLICATION` |
+| arbitralny egress workera | Ahmia + v3 `.onion` allowlist, fixed argv | `MITIGATED_APPLICATION` |
+| ominięcie Tor przez worker | osobna wewnętrzna sieć `tor-lane` | `MITIGATED_COMPOSE` |
+| shell injection | brak shella, stałe argv curl | `MITIGATED` |
+| oversized/slow source | timeouts, limits bytes/results | `MITIGATED` |
+| false positive osoby | jawny candidate + correlation required | `MITIGATED_REPORTING` |
+| index = content | dwa odrębne verification states | `MITIGATED_REPORTING` |
+| credential exposure | metadata allowlist, raw rows discarded | `MITIGATED_ADAPTER` |
+| query leakage to Engine | tylko SHA-256 identyfikatora | `MITIGATED` |
+| execution without evidence | Engine `COMPLETED` gate | `MITIGATED_POLICY` |
+| ledger edit | hash-chain verification | `DETECTABLE`, nie WORM |
+| supply chain | stdlib runtime; brak vendoringu 20 repo | `REDUCED` |
 
 ## Remaining risks
 
-- Administrator hosta może podmienić ledger i przeliczyć cały łańcuch. Kotwica
-  zewnętrzna/WORM nie jest zaimplementowana.
-- HMAC jest jednym współdzielonym sekretem; KMS i rotacja kluczy są planowane.
-- SQLite i JSONL są przeznaczone dla jednego procesu.
-- API nie ma RBAC; istnieje jeden operator token.
-- OSA Engine behavioral integration z tym hostem wymaga osobnego testu na realnej
-  instancji; w CI używany jest test double.
+- publiczny endpoint nie ma jeszcze rate limitu ani CAPTCHA; preview nie powinien
+  być traktowany jak bezobsługowa usługa produkcyjna;
+- operator może skłamać w polu celu/zgody;
+- provider widzi query i może je logować zgodnie ze swoim regulaminem;
+- Tor nie gwarantuje anonimowości przeciw każdemu przeciwnikowi;
+- Docker network isolation nie zastępuje microVM ani host firewall;
+- HTML parser nie renderuje JS i może ominąć treść aplikacji dynamicznej;
+- indeks Ahmia ma niepełne i opóźnione pokrycie;
+- administrator hosta może podmienić ledger i przeliczyć cały łańcuch;
+- jeden Bearer token nie zapewnia RBAC ani rozliczalności wielu operatorów;
+- realny Engine i pełna topologia Tor muszą przejść test na docelowym hoście.

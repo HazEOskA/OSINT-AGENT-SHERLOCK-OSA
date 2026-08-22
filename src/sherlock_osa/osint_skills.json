@@ -1,0 +1,97 @@
+{
+  "schema_version": "1.0",
+  "registry": "sherlock-osa-project-skills",
+  "source_of_truth": "PROJECT_LOCAL_WITH_OSA_ENGINE_ORCHESTRATION",
+  "skills": [
+    {
+      "id": "osint.query-classification",
+      "version": "1.0.0",
+      "title": "Klasyfikacja identyfikatora",
+      "accepts": ["AUTO", "EMAIL", "PHONE", "PERSON", "USERNAME", "DOMAIN", "IP"],
+      "adapters": ["local.identifier-normalizer"],
+      "effect": "LOCAL_ONLY",
+      "description": "Rozpoznaje typ, normalizuje wartość i odrzuca niejednoznaczne lub niepoprawne wejście."
+    },
+    {
+      "id": "osint.phone-intelligence",
+      "version": "1.0.0",
+      "title": "Telefon i ekspozycja",
+      "accepts": ["PHONE"],
+      "adapters": ["local.phone-metadata", "leakcheck.v2", "worker.phoneinfoga", "worker.ignorant"],
+      "effect": "PASSIVE_FIXED_EGRESS",
+      "description": "Normalizuje numer do E.164, ustala kod kraju i — przy skonfigurowanym providerze — zwraca wyłącznie metadane źródeł wycieku."
+    },
+    {
+      "id": "osint.email-exposure",
+      "version": "1.0.0",
+      "title": "E-mail i wycieki",
+      "accepts": ["EMAIL"],
+      "adapters": ["xposedornot.community", "leakcheck.v2", "worker.holehe"],
+      "effect": "PASSIVE_FIXED_EGRESS",
+      "description": "Sprawdza publiczny indeks breach oraz planuje pasywne wykrywanie kont; nigdy nie zwraca haseł ani surowych rekordów."
+    },
+    {
+      "id": "osint.person-discovery",
+      "version": "1.0.0",
+      "title": "Osoba i warianty tożsamości",
+      "accepts": ["PERSON"],
+      "adapters": ["wikidata.search", "local.search-pack"],
+      "effect": "PASSIVE_FIXED_EGRESS",
+      "description": "Buduje warianty imienia i nazwiska, sprawdza encyklopedyczne encje publiczne i tworzy kontrolowane pivoty."
+    },
+    {
+      "id": "osint.username-discovery",
+      "version": "1.0.0",
+      "title": "Username discovery",
+      "accepts": ["USERNAME"],
+      "adapters": ["github.public-profile", "local.profile-map", "leakcheck.v2", "worker.sherlock", "worker.maigret", "worker.whatsmyname"],
+      "effect": "PASSIVE_FIXED_EGRESS",
+      "description": "Sprawdza publiczne profile i przekazuje pełną enumerację do allowlistowanych workerów Sherlock/Maigret."
+    },
+    {
+      "id": "osint.domain-intelligence",
+      "version": "1.0.0",
+      "title": "Domena, DNS i RDAP",
+      "accepts": ["DOMAIN"],
+      "adapters": ["local.dns", "rdap.bootstrap", "worker.amass", "worker.spiderfoot", "worker.recon-ng"],
+      "effect": "PASSIVE_FIXED_EGRESS_OR_ISOLATED_TOR",
+      "description": "Zbiera pasywne rekordy DNS i rejestracyjne; rozbudowany recon działa wyłącznie przez prywatnego workera."
+    },
+    {
+      "id": "osint.ip-intelligence",
+      "version": "1.0.0",
+      "title": "Adres IP",
+      "accepts": ["IP"],
+      "adapters": ["local.reverse-dns", "rdap.bootstrap"],
+      "effect": "PASSIVE_FIXED_EGRESS",
+      "description": "Wykonuje pasywne reverse DNS i RDAP bez skanowania portów."
+    },
+    {
+      "id": "osint.darkweb-index-search",
+      "version": "1.0.0",
+      "title": "Dark-web index search",
+      "accepts": ["EMAIL", "PHONE", "PERSON", "USERNAME", "DOMAIN", "IP"],
+      "adapters": ["ahmia.clearnet-index", "worker.tor-research"],
+      "effect": "PASSIVE_FIXED_EGRESS",
+      "description": "Przeszukuje indeks Ahmia; bezpośredni crawl .onion wymaga izolowanego prywatnego workera z wymuszoną trasą Tor."
+    },
+    {
+      "id": "osint.pivot-correlation",
+      "version": "1.0.0",
+      "title": "Korelacja i pivoty",
+      "accepts": ["EMAIL", "PHONE", "PERSON", "USERNAME", "DOMAIN", "IP"],
+      "adapters": ["local.entity-graph"],
+      "effect": "LOCAL_ONLY",
+      "description": "Łączy wyłącznie fakty z dowodem i oddziela kandydatów od potwierdzonych powiązań."
+    },
+    {
+      "id": "osint.evidence-report",
+      "version": "1.0.0",
+      "title": "Evidence i raport",
+      "accepts": ["EMAIL", "PHONE", "PERSON", "USERNAME", "DOMAIN", "IP"],
+      "adapters": ["local.sha256-ledger", "local.report-synthesizer"],
+      "effect": "LOCAL_ONLY",
+      "description": "Tworzy skrót zapytania, per-request hash-chain, status każdego źródła i raport bez trwałego zapisu PII w publicznym preview."
+    }
+  ]
+}

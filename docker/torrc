@@ -1,0 +1,7 @@
+ClientOnly 1
+SocksPort 0.0.0.0:9050
+SocksPolicy accept 0.0.0.0/0
+SocksPolicy accept6 [::]/0
+DataDirectory /var/lib/tor
+AvoidDiskWrites 1
+Log notice stdout
