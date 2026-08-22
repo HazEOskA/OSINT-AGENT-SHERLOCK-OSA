@@ -44,6 +44,7 @@ class MissionStore:
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
         connection.execute("PRAGMA journal_mode = WAL")
+        connection.execute("PRAGMA secure_delete = ON")
         return connection
 
     def create_mission(self, scope: MissionScope, engine_receipt: Mapping[str, Any]) -> None:
@@ -112,3 +113,20 @@ class MissionStore:
         if row is None:
             raise SherlockError("DECISION_NOT_FOUND", "Nie znaleziono decyzji.", status=404)
         return json.loads(row["request_json"]), json.loads(row["decision_json"])
+
+    def purge_mission(self, mission_id: str) -> dict[str, int | bool]:
+        """Delete one local mission and all dependent decisions. Never touches external systems."""
+        with self._lock, self._connect() as connection:
+            row = connection.execute(
+                "SELECT COUNT(*) AS count FROM decisions WHERE mission_id = ?", (mission_id,)
+            ).fetchone()
+            decision_count = int(row["count"]) if row is not None else 0
+            mission_exists = connection.execute(
+                "SELECT 1 FROM missions WHERE mission_id = ?", (mission_id,)
+            ).fetchone() is not None
+            connection.execute("DELETE FROM decisions WHERE mission_id = ?", (mission_id,))
+            connection.execute("DELETE FROM missions WHERE mission_id = ?", (mission_id,))
+        return {
+            "mission_deleted": mission_exists,
+            "decisions_deleted": decision_count,
+        }
