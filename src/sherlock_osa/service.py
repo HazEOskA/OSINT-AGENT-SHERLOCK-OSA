@@ -87,6 +87,28 @@ class MissionService:
             "adapters": [adapter.to_dict() for adapter in ADAPTERS],
         }
 
+    def _scope_for_ledger(self, scope: MissionScope) -> dict[str, object]:
+        raw = scope.to_dict()
+        if scope.mode is not MissionMode.RESEARCH_PASSIVE:
+            return raw
+        redacted_targets = [
+            {
+                "kind": target.kind.value,
+                "value_sha256": sha256_json(
+                    {"kind": target.kind.value, "value": target.value, "ports": list(target.ports)}
+                ),
+                "ports": list(target.ports),
+            }
+            for target in scope.targets
+        ]
+        return raw | {
+            "targets": redacted_targets,
+            "privacy": {
+                "target_plaintext_recorded": False,
+                "target_values_hashed": True,
+            },
+        }
+
     def create_mission(self, raw: object) -> dict[str, object]:
         data = require_mapping(raw, field_name="mission")
         goal = require_string(data.get("goal"), field_name="goal", minimum=10, maximum=500)
@@ -170,12 +192,13 @@ class MissionService:
         )
         signed_scope = sign_scope(scope, self.settings.mission_signing_secret)
         self.store.create_mission(signed_scope, safe_engine_body)
+        full_scope = signed_scope.to_dict()
         self.ledger.append(
             "MISSION_SCOPE_CREATED",
             {
                 "mission_id": signed_scope.mission_id,
-                "scope": signed_scope.to_dict(),
-                "scope_sha256": sha256_json(signed_scope.to_dict()),
+                "scope": self._scope_for_ledger(signed_scope),
+                "scope_sha256": sha256_json(full_scope),
             },
         )
         self.ledger.append(

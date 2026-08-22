@@ -3,6 +3,7 @@ from __future__ import annotations
 import ipaddress
 import re
 from datetime import datetime
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from sherlock_osa.contracts import (
@@ -23,6 +24,7 @@ from sherlock_osa.signing import sha256_json, verify_scope
 
 LAB_ASSET_RE = re.compile(r"^lab://[a-z0-9](?:[a-z0-9._-]{0,62})$")
 USERNAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
+EMAIL_RE = re.compile(r"^[^\s@]{1,64}@[^\s@]{1,253}$")
 DOMAIN_RE = re.compile(
     r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$"
 )
@@ -31,8 +33,12 @@ SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 MODE_CAPABILITIES: dict[MissionMode, frozenset[str]] = {
     MissionMode.RESEARCH_PASSIVE: frozenset(
         {
+            "osint.research.run",
+            "osint.email.lookup",
             "osint.username.lookup",
+            "osint.url.trace",
             "osint.domain.passive",
+            "osint.correlation.expand",
             "intel.indicator.enrich",
             "evidence.verify",
         }
@@ -82,6 +88,23 @@ def _validate_domain(value: str) -> bool:
     return False
 
 
+def _validate_email(value: str) -> bool:
+    if len(value) > 320 or not EMAIL_RE.fullmatch(value):
+        return False
+    _, _, domain = value.rpartition("@")
+    return _validate_domain(domain)
+
+
+def _validate_url(value: str) -> bool:
+    if len(value) > 2048:
+        return False
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return False
+    return parsed.scheme in {"http", "https"} and bool(parsed.hostname)
+
+
 def validate_target_for_mode(mode: MissionMode, target: Target) -> None:
     if mode is MissionMode.LAB_RANGE:
         if target.kind is not TargetKind.LAB_ASSET or not LAB_ASSET_RE.fullmatch(target.value):
@@ -95,7 +118,11 @@ def validate_target_for_mode(mode: MissionMode, target: Target) -> None:
             raise SherlockError(
                 "PASSIVE_TARGET_HAS_PORTS", "RESEARCH_PASSIVE nie przyjmuje portów targetu."
             )
+        if target.kind is TargetKind.EMAIL and _validate_email(target.value):
+            return
         if target.kind is TargetKind.USERNAME and USERNAME_RE.fullmatch(target.value):
+            return
+        if target.kind is TargetKind.URL and _validate_url(target.value):
             return
         if target.kind is TargetKind.DOMAIN and _validate_domain(target.value):
             return
@@ -105,7 +132,7 @@ def validate_target_for_mode(mode: MissionMode, target: Target) -> None:
                 return
         raise SherlockError(
             "INVALID_PASSIVE_TARGET",
-            "RESEARCH_PASSIVE akceptuje USERNAME, DOMAIN albo INDICATOR sha256:<hash>.",
+            "RESEARCH_PASSIVE akceptuje EMAIL, USERNAME, URL http(s), DOMAIN albo INDICATOR sha256:<hash>.",
         )
     if mode is MissionMode.AUTHORIZED_EXTERNAL:
         if target.kind is TargetKind.DOMAIN and _validate_domain(target.value):
@@ -148,7 +175,6 @@ def validate_scope_definition(
     for target in targets:
         validate_target_for_mode(mode, target)
     if mode is MissionMode.AUTHORIZED_EXTERNAL:
-        # The schema exists now, but accepting self-asserted proof would be a false gate.
         raise SherlockError(
             "OWNERSHIP_VERIFIER_UNAVAILABLE",
             "AUTHORIZED_EXTERNAL jest fail-closed: niezależny ownership verifier pozostaje UNBACKED.",

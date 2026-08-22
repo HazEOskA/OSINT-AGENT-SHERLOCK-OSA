@@ -63,7 +63,9 @@ class MissionMode(StrEnum):
 
 
 class TargetKind(StrEnum):
+    EMAIL = "EMAIL"
     USERNAME = "USERNAME"
+    URL = "URL"
     DOMAIN = "DOMAIN"
     INDICATOR = "INDICATOR"
     LAB_ASSET = "LAB_ASSET"
@@ -77,6 +79,7 @@ class DecisionEffect(StrEnum):
 
 class BackingStatus(StrEnum):
     BACKED_SIMULATION = "BACKED_SIMULATION"
+    BACKED_LOCAL = "BACKED_LOCAL"
     UNBACKED = "UNBACKED"
 
 
@@ -93,7 +96,7 @@ class Target:
             kind = TargetKind(require_string(data.get("kind"), field_name="target.kind", maximum=40))
         except ValueError as exc:
             raise SherlockError("INVALID_TARGET_KIND", "Nieznany target.kind.") from exc
-        value = require_string(data.get("value"), field_name="target.value", maximum=253)
+        value = require_string(data.get("value"), field_name="target.value", maximum=2048)
         raw_ports = data.get("ports", [])
         if not isinstance(raw_ports, list):
             raise SherlockError("INVALID_PORTS", "target.ports musi być listą.")
