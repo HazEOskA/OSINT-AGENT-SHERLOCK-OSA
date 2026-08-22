@@ -16,6 +16,7 @@ from sherlock_osa.research import (
     TrustState,
 )
 from sherlock_osa.storage import MissionStore
+from tests.support import build_test_service
 
 
 class PoisonModule:
@@ -102,6 +103,29 @@ class ResearchEngineTests(unittest.TestCase):
     def test_budget_refuses_more_than_five_minutes(self) -> None:
         with self.assertRaises(ValueError):
             ResearchBudget(hard_timeout_seconds=301)
+
+
+class ResearchPrivacyTests(unittest.TestCase):
+    def test_passive_target_plaintext_is_not_written_to_evidence_ledger(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            service, _ = build_test_service(root)
+            target = "alice.private@example.com"
+            service.create_mission(
+                {
+                    "goal": "Perform bounded passive identity research with ephemeral target storage",
+                    "mode": "RESEARCH_PASSIVE",
+                    "targets": [{"kind": "EMAIL", "value": target, "ports": []}],
+                    "allowed_capabilities": ["osint.research.run", "osint.correlation.expand"],
+                    "ttl_minutes": 5,
+                    "operator_id": "osa",
+                }
+            )
+            ledger_text = (root / "evidence.jsonl").read_text(encoding="utf-8")
+
+        self.assertNotIn(target, ledger_text)
+        self.assertIn('"target_plaintext_recorded":false', ledger_text)
+        self.assertIn('"value_sha256"', ledger_text)
 
 
 class StorePurgeTests(unittest.TestCase):
