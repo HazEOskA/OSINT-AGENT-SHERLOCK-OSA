@@ -2,7 +2,7 @@
 
 **Evidence-first, bounded OSINT research runtime sterowany przez OSA Execution Force Engine.**
 
-Sherlock OSA nie ufa modelowi językowemu jako granicy bezpieczeństwa. OSA Execution Force Engine rozpoznaje intencję i prowadzi misję, a deterministyczny broker poza modelem egzekwuje podpisany scope. Research działa jako bounded fan-out → evidence → correlation → trusted pivots, z twardym limitem 300 s.
+Sherlock OSA nie ufa modelowi językowemu jako granicy bezpieczeństwa. OSA Execution Force Engine prowadzi misję, deterministyczny broker egzekwuje podpisany scope, a research działa jako bounded fan-out → evidence → correlation → trusted pivots z twardym limitem 300 s.
 
 ## Status v0.3.0
 
@@ -10,24 +10,26 @@ Sherlock OSA nie ufa modelowi językowemu jako granicy bezpieczeństwa. OSA Exec
 
 - jeden control plane przez OSA Execution Force Engine;
 - `RESEARCH_PASSIVE` dla `EMAIL | USERNAME | URL | DOMAIN | INDICATOR`;
-- bounded recursive research kernel: dedupe, max depth, max identifiers, max evidence, max invocations i 300 s hard deadline;
+- recursive research kernel: dedupe, max depth, identifiers, evidence, invocations i 300 s hard deadline;
 - poison/injection checker: `TAINTED` evidence nie może tworzyć kolejnych pivotów;
 - SSE/JSON research endpoints;
-- privacy-safe evidence metadata: target passive jest hashowany w ledgerze;
+- target passive hashowany w evidence ledgerze;
 - raw source evidence pozostaje ephemeral;
 - `purge_after=true` usuwa lokalny scope i decisions z SQLite;
 - publiczny Vercel deploy pozostaje stateless LAB replay demo.
 
 ### SOURCE PACK v1
 
-Opcjonalny runtime `.[research]` integruje dwa niezależne projekty przez killowalne subprocessy:
+Network resolvers działają w killowalnych subprocessach. Target przechodzi przez `stdin`, nie argv.
 
-- **Holehe 1.61** — email → registered-account signals na 100+ usługach. Sherlock nie zachowuje recovery email/phone hints;
-- **Maigret 0.6.4** — username → profile discovery na rankingu do 500 publicznych serwisów na lookup, z profile parsing i kontrolowanymi URL/email/username pivots.
+- **Holehe 1.61** — `EMAIL` → account-registration signals na 100+ usługach; recovery email/phone hints są celowo odrzucane;
+- **Maigret 0.6.4** — `USERNAME` → profile discovery na top 500 publicznych serwisów per lookup, parsing profilu oraz kontrolowane `URL/EMAIL/USERNAME` pivots;
+- **Internet Archive CDX** — `URL | DOMAIN` → historyczne publiczne captures/URL-e;
+- **crt.sh Certificate Transparency** — `DOMAIN` → zwalidowane publiczne nazwy certyfikatów/subdomeny.
 
-Target jest przekazywany workerowi przez `stdin`, nie argv. Każdy source worker ma timeout i może zostać zabity przez parent runtime. Maigret jest ograniczony do source depth `<=1`, Holehe do `<=2`, aby recursive graph nie zamienił się w niekontrolowany fan-out.
+Provider-specific depth bounds zatrzymują powtórne masowe odpytywanie: Maigret `<=1`, Holehe `<=2`, Wayback URL `<=2`, Wayback domain `<=1`, crt.sh `<=1`.
 
-**Truth boundary:** obecność i wersje zależności są mechanicznie sprawdzane. Globalna dostępność Internetu/konkretnej usługi nie jest deklarowana jako BACKED — jest oceniana per lookup.
+**Truth boundary:** lokalna rejestracja source packa i wersje Holehe/Maigret są mechanicznie sprawdzane. Globalna dostępność Internetu ani konkretnej usługi nie jest deklarowana jako BACKED — jest oceniana per lookup.
 
 ## Architecture
 
@@ -41,11 +43,11 @@ EMAIL / USERNAME / URL / DOMAIN / INDICATOR
                     │
                     ▼
           Bounded Research Engine
-        ┌───────────┼──────────────┐
-        ▼           ▼              ▼
- seed-expansion   Holehe         Maigret
-   local          subprocess      subprocess
-        └───────────┼──────────────┘
+        ┌───────────┼──────────────┬───────────┐
+        ▼           ▼              ▼           ▼
+ seed-expansion   Holehe         Maigret    Wayback / CT
+    local        subprocess      subprocess    subprocess
+        └───────────┴──────────────┴───────────┘
                     ▼
              normalized evidence
                     │
@@ -67,6 +69,12 @@ EMAIL / USERNAME / URL / DOMAIN / INDICATOR
              local DB purge
 ```
 
+Przykładowe ścieżki:
+
+`EMAIL → username/domain → Holehe + Maigret → profile URL → Wayback → historical URLs`
+
+`DOMAIN → crt.sh → validated subdomains`
+
 OSA Engine jest przypięty do SHA `f365360383511fea13cd3f7af36ecbbc720ce38d`. Repo `HazEOskA/osa-execution-force-skills` pozostaje źródłem prawdy dla routingu i kontraktów Engine; Sherlock nie tworzy drugiego routera.
 
 ## Instalacja core
@@ -81,8 +89,6 @@ cp .env.example .env
 sherlock-osa serve --env-file .env
 ```
 
-Core nie instaluje zależności Holehe/Maigret.
-
 ## Instalacja research runtime
 
 ```bash
@@ -91,21 +97,19 @@ python scripts/source_smoke.py
 sherlock-osa serve --env-file .env
 ```
 
-Docker research image:
-
 ```bash
 docker build -f Dockerfile.research -t sherlock-osa:research .
 docker run --env-file .env -p 8787:8787 sherlock-osa:research
 ```
 
-Domyślny `Dockerfile` pozostaje dependency-clean Apache core. `Dockerfile.research` instaluje opcjonalny source pack.
+Domyślny `Dockerfile` pozostaje dependency-clean Apache core. `Dockerfile.research` instaluje opcjonalne Holehe/Maigret; Wayback/crt.sh adapters używają biblioteki standardowej.
 
 ## API research
 
-1. `POST /api/v1/missions` — utwórz podpisaną misję `RESEARCH_PASSIVE` z capability `osint.research.run` + source capabilities.
-2. `GET /api/v1/research/sources` — dependency/version health source packa.
+1. `POST /api/v1/missions` — podpisana misja `RESEARCH_PASSIVE`.
+2. `GET /api/v1/research/sources` — source/dependency health.
 3. `POST /api/v1/research` — bounded research JSON.
-4. `POST /api/v1/research/stream` — ten sam research jako SSE.
+4. `POST /api/v1/research/stream` — ten sam research przez SSE.
 
 Domyślnie `purge_after=true`.
 
@@ -118,16 +122,16 @@ python scripts/smoke.py
 python scripts/smoke_demo.py
 ```
 
-CI instaluje dokładnie `holehe==1.61` i `maigret==0.6.4`, sprawdza dependency health offline, następnie uruchamia cały istniejący suite, vertical smoke i public replay smoke. Testy nie wykonują masowego researchu po zewnętrznych serwisach.
+CI instaluje dokładnie `holehe==1.61` i `maigret==0.6.4`, weryfikuje pełny source registry, uruchamia unit/contracts, vertical smoke i public replay smoke. CI nie wykonuje masowego researchu na zewnętrznych serwisach.
 
 ## Licencje / sprzedaż
 
 Kod Sherlock OSA core: **Apache-2.0**.
 
-Source pack nie vendoruje kodu Holehe ani Maigret — instaluje je jako opcjonalne zależności i uruchamia w oddzielnych subprocessach. Holehe jest **GPLv3**, Maigret **MIT**. GPL dopuszcza użycie komercyjne, ale dystrybucja obrazu/pakietu zawierającego GPL ma obowiązki licencyjne. Dlatego core i research image są rozdzielone. Dla SaaS należy nadal zachować notices i warunki używanych usług.
+Source pack nie vendoruje kodu Holehe ani Maigret. Holehe pozostaje **GPLv3**, Maigret **MIT**; dlatego domyślny core image i research image są rozdzielone. Komercyjne użycie jest możliwe, ale dystrybucja research package/image wymaga spełnienia obowiązków odpowiednich licencji. SaaS nadal wymaga sprawdzenia terms źródeł, lawful basis, privacy law i retention dla konkretnego use case.
 
 Szczegóły: [`docs/RESEARCH_SOURCE_PACK_V0.3.md`](docs/RESEARCH_SOURCE_PACK_V0.3.md).
 
 ## Boundary
 
-Sherlock v0.3.0 nie zawiera breach dumps, infostealer logs ani funkcji nieautoryzowanego kasowania danych z cudzych systemów. `external_deletion_performed=false`. Legalne data-erasure workflows mogą być osobną warstwą opartą o oficjalne API/procedury administratorów danych.
+Sherlock v0.3.0 nie zawiera breach dumps, infostealer logs ani funkcji nieautoryzowanego kasowania danych z cudzych systemów. `external_deletion_performed=false`. `purge_after` dotyczy lokalnego SQLite; nie jest deklaracją usunięcia danych z OSA Engine ani zewnętrznych providerów.
