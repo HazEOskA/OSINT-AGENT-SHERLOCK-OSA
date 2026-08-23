@@ -5,7 +5,7 @@ import importlib.metadata
 import json
 import sys
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Mapping
 
 from sherlock_osa.research import (
     IdentifierKind,
@@ -26,6 +26,7 @@ class SourceDescriptor:
     expected_version: str
     supported_kinds: frozenset[IdentifierKind]
     required_capability: str
+    max_identifier_depth: int
     network_effect: bool = True
 
     def health(self) -> dict[str, object]:
@@ -40,6 +41,7 @@ class SourceDescriptor:
                 "expected_version": self.expected_version,
                 "version_match": False,
                 "network_effect": self.network_effect,
+                "max_identifier_depth": self.max_identifier_depth,
             }
         return {
             "name": self.name,
@@ -49,6 +51,7 @@ class SourceDescriptor:
             "expected_version": self.expected_version,
             "version_match": version == self.expected_version,
             "network_effect": self.network_effect,
+            "max_identifier_depth": self.max_identifier_depth,
         }
 
 
@@ -58,6 +61,7 @@ HOLEHE = SourceDescriptor(
     expected_version="1.61",
     supported_kinds=frozenset({IdentifierKind.EMAIL}),
     required_capability="osint.email.lookup",
+    max_identifier_depth=2,
 )
 
 MAIGRET = SourceDescriptor(
@@ -66,6 +70,7 @@ MAIGRET = SourceDescriptor(
     expected_version="0.6.4",
     supported_kinds=frozenset({IdentifierKind.USERNAME}),
     required_capability="osint.username.lookup",
+    max_identifier_depth=1,
 )
 
 SOURCE_DESCRIPTORS = (HOLEHE, MAIGRET)
@@ -85,6 +90,16 @@ class IsolatedSourceModule(ResearchModule):
         self.required_capability = descriptor.required_capability
 
     async def lookup(self, identifier: ResearchIdentifier, context: ModuleContext) -> ModuleResult:
+        if identifier.depth > self.descriptor.max_identifier_depth:
+            return ModuleResult(
+                fields={
+                    "provider": self.descriptor.name,
+                    "skipped": "SOURCE_DEPTH_BOUND",
+                    "identifier_depth": identifier.depth,
+                    "max_identifier_depth": self.descriptor.max_identifier_depth,
+                },
+                confidence=0.0,
+            )
         remaining = context.remaining_seconds
         if remaining <= 0:
             raise TimeoutError("research deadline reached")
