@@ -4,9 +4,17 @@
     {
       "src": "api/index.py",
       "use": "@vercel/python"
+    },
+    {
+      "src": "api/canary.py",
+      "use": "@vercel/python"
     }
   ],
   "routes": [
+    {
+      "src": "/api/v1/canary/emailosint",
+      "dest": "/api/canary.py"
+    },
     {
       "src": "/.*",
       "dest": "/api/index.py?__osa_path=$1"
