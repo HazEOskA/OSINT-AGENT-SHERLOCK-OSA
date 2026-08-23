@@ -45,7 +45,7 @@ function token() {
 }
 
 async function api(path, options = {}, auth = true) {
-  const headers = { "Accept": "application/json", ...(options.headers || {}) };
+  const headers = { Accept: "application/json", ...(options.headers || {}) };
   if (options.body) headers["Content-Type"] = "application/json";
   if (auth) headers.Authorization = `Bearer ${token()}`;
   const response = await fetch(path, { ...options, headers });
@@ -67,9 +67,7 @@ function missionPayload(form) {
   const mode = field(form, "mode");
   const portRaw = field(form, "port");
   const ports = portRaw && mode !== "RESEARCH_PASSIVE" ? [Number(portRaw)] : [];
-  const capabilities = mode === "RESEARCH_PASSIVE"
-    ? researchCapabilities
-    : [field(form, "capability")];
+  const capabilities = mode === "RESEARCH_PASSIVE" ? researchCapabilities : [field(form, "capability")];
   return {
     goal: field(form, "goal"),
     mode,
@@ -98,7 +96,6 @@ function personUsernameTargets(value) {
     error.code = "PERSON_NAME_REQUIRED";
     throw error;
   }
-
   const first = parts[0];
   const last = parts[parts.length - 1];
   const middle = parts.slice(1, -1).join("");
@@ -115,7 +112,6 @@ function personUsernameTargets(value) {
     candidates.add(`${first}${middle}${last}`);
     candidates.add(`${first}.${middle}.${last}`);
   }
-
   return [...candidates]
     .filter((candidate) => /^[a-z0-9][a-z0-9_.-]{0,63}$/.test(candidate))
     .slice(0, 9)
@@ -130,14 +126,9 @@ function searchPayload(form) {
     error.code = "SEARCH_QUERY_REQUIRED";
     throw error;
   }
-
-  let targets;
-  if (kind === "PERSON") {
-    targets = personUsernameTargets(query);
-  } else {
-    targets = [{ kind, value: query, ports: [] }];
-  }
-
+  const targets = kind === "PERSON"
+    ? personUsernameTargets(query)
+    : [{ kind, value: query, ports: [] }];
   return {
     goal: kind === "PERSON"
       ? "OSINT person lookup: derive bounded username candidates and correlate public evidence"
@@ -185,11 +176,8 @@ function renderResearchResult(bundle, search = false) {
     ["STOP", research.stop_reason || "UNKNOWN"],
     ["PURGE", bundle.purge?.performed === true ? "DONE" : "OFF"],
   ];
-  if (search) {
-    renderFacts("#search-result", "#search-result-grid", "#search-result-json", bundle, facts);
-  } else {
-    renderFacts("#result", "#result-grid", "#result-json", bundle, facts);
-  }
+  if (search) renderFacts("#search-result", "#search-result-grid", "#search-result-json", bundle, facts);
+  else renderFacts("#result", "#result-grid", "#result-json", bundle, facts);
 }
 
 function renderExecutionResult(bundle) {
@@ -208,18 +196,12 @@ function renderExecutionResult(bundle) {
 }
 
 async function createResearch(payload, purgeAfter = true) {
-  const missionResponse = await api("/api/v1/missions", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
+  const missionResponse = await api("/api/v1/missions", { method: "POST", body: JSON.stringify(payload) });
   const mission = missionResponse.mission;
   state.lastMission = mission;
   const researchResponse = await api("/api/v1/research", {
     method: "POST",
-    body: JSON.stringify({
-      mission_id: mission.mission_id,
-      purge_after: purgeAfter,
-    }),
+    body: JSON.stringify({ mission_id: mission.mission_id, purge_after: purgeAfter }),
   });
   return { mission: missionResponse, ...researchResponse };
 }
@@ -231,12 +213,12 @@ async function runSearch(event) {
   button.disabled = true;
   button.textContent = "SEARCH → FAN-OUT → CORRELATE…";
   try {
+    const payload = searchPayload(form);
     if (state.deploymentMode === "PUBLIC_REPLAY_DEMO") {
-      const error = new Error("Ten publiczny deploy jest replay-only. Live search wymaga prywatnego runtime połączonego z OSA Engine.");
+      const error = new Error("Pole działa, ale ten deployment jest replay-only. Live search wymaga podpięcia prywatnego Sherlock runtime do OSA Execution Force Engine.");
       error.code = "LIVE_RESEARCH_UNAVAILABLE";
       throw error;
     }
-    const payload = searchPayload(form);
     const bundle = await createResearch(payload, true);
     state.lastBundle = bundle;
     renderResearchResult(bundle, true);
@@ -244,7 +226,7 @@ async function runSearch(event) {
   } catch (error) {
     toast(`${error.code || "ERROR"}: ${error.message}`, true);
   } finally {
-    button.disabled = state.deploymentMode === "PUBLIC_REPLAY_DEMO";
+    button.disabled = false;
     button.textContent = "SZUKAJ → CORRELATE → EVIDENCE";
   }
 }
@@ -264,11 +246,7 @@ async function runFlow(event) {
         : "WYKONYWANIE KONTROLOWANEGO FLOW…";
 
     if (state.deploymentMode === "PUBLIC_REPLAY_DEMO") {
-      const bundle = await api(
-        "/api/v1/demo/replay",
-        { method: "POST", body: JSON.stringify(payload) },
-        false,
-      );
+      const bundle = await api("/api/v1/demo/replay", { method: "POST", body: JSON.stringify(payload) }, false);
       state.lastBundle = bundle;
       renderExecutionResult(bundle);
       toast("Replay VALID. Live Engine i efekty sieciowe nie zostały uruchomione.");
@@ -306,9 +284,7 @@ async function runFlow(event) {
         body: JSON.stringify({ decision_id: decisionResponse.decision.decision_id }),
       });
     }
-    const replayResponse = await api(`/api/v1/missions/${mission.mission_id}/replay`, {
-      method: "POST", body: "{}",
-    });
+    const replayResponse = await api(`/api/v1/missions/${mission.mission_id}/replay`, { method: "POST", body: "{}" });
     const bundle = { mission: missionResponse, decision: decisionResponse, execution: executionResponse, replay: replayResponse };
     state.lastBundle = bundle;
     renderExecutionResult(bundle);
@@ -332,7 +308,9 @@ function updateSearchMode() {
     PERSON: ["Jan Kowalski", "Imię + nazwisko tworzy deterministyczne kandydaty username; nie jest udawane jako natywny provider full-name search."],
   }[kind];
   input.placeholder = config[0];
-  note.textContent = config[1];
+  note.textContent = state.deploymentMode === "PUBLIC_REPLAY_DEMO"
+    ? `${config[1]} UI intake jest aktywny; wykonanie live pozostaje fail-closed do czasu podpięcia OSA runtime.`
+    : config[1];
 }
 
 function updateFormMode() {
@@ -347,9 +325,7 @@ function updateFormMode() {
   capability.disabled = research;
   port.disabled = research;
   if (purge) purge.disabled = !research;
-  button.textContent = research
-    ? "ENGINE → RESEARCH → CORRELATE → PURGE"
-    : "ENGINE → SIGN → DECIDE → SIMULATE";
+  button.textContent = research ? "ENGINE → RESEARCH → CORRELATE → PURGE" : "ENGINE → SIGN → DECIDE → SIMULATE";
   $("#form-note").textContent = research
     ? "Publiczne/pasywne źródła only. 300 s hard stop, poison gate i local purge."
     : "LAB worker pozostaje kontrolowany przez podpisany scope i deterministic broker.";
@@ -365,8 +341,11 @@ function configurePublicReplay() {
   const searchKey = $("#search-api-key");
   searchKeyField.hidden = true;
   searchKey.required = false;
-  for (const control of $("#search-form").elements) control.disabled = true;
-  $("#search-note").textContent = "PUBLIC REPLAY jest read-only. Live OSINT search wymaga prywatnego runtime połączonego z OSA Engine.";
+
+  // IMPORTANT: public replay must never disable the primary search intake.
+  // The user can type and validate the query; execution itself stays fail-closed.
+  for (const control of $("#search-form").elements) control.disabled = false;
+  updateSearchMode();
 
   const form = $("#mission-form");
   const mode = form.elements.namedItem("mode");
@@ -405,7 +384,7 @@ function configurePublicReplay() {
 
   $("#deployment-mode").classList.add("online");
   $("#deployment-mode").innerHTML = "<i></i> PUBLIC REPLAY";
-  $("#mission-intro").textContent = "Publiczny deploy odtwarza jawnie oznaczony replay. Search-first UI pozostaje widoczny jako kontrakt produktu, ale live research jest fail-closed bez prywatnego runtime.";
+  $("#mission-intro").textContent = "Publiczny deploy odtwarza jawnie oznaczony replay. Primary search intake pozostaje interaktywny; wykonanie live wymaga prywatnego runtime połączonego z OSA Engine.";
   $("#submit-flow").textContent = "REPLAY VECTOR → BROKER → EVIDENCE";
   $("#form-note").textContent = "Tryb publiczny jest stateless i LAB-only. Nowe misje wymagają prywatnego runtime.";
 }
@@ -416,9 +395,7 @@ async function loadStatus() {
     state.deploymentMode = health.deployment_mode || "PRIVATE_CONTROL_PLANE";
     const status = $("#service-status");
     status.classList.add("online");
-    status.innerHTML = state.deploymentMode === "PUBLIC_REPLAY_DEMO"
-      ? "<i></i> DEMO ONLINE"
-      : "<i></i> API ONLINE";
+    status.innerHTML = state.deploymentMode === "PUBLIC_REPLAY_DEMO" ? "<i></i> DEMO ONLINE" : "<i></i> API ONLINE";
     if (state.deploymentMode === "PUBLIC_REPLAY_DEMO") configurePublicReplay();
     else updateFormMode();
     if (health.status !== "OK") status.textContent = `API ${health.status}`;
@@ -475,7 +452,10 @@ async function verifyLedger() {
   }
   try {
     const result = await api("/api/v1/evidence/verify");
-    toast(result.valid ? `Ledger VALID // ${result.record_count} rekordów // ${result.head_hash.slice(0, 12)}…` : `Ledger INVALID: ${result.errors.join(", ")}`, !result.valid);
+    toast(result.valid
+      ? `Ledger VALID // ${result.record_count} rekordów // ${result.head_hash.slice(0, 12)}…`
+      : `Ledger INVALID: ${result.errors.join(", ")}`,
+    !result.valid);
   } catch (error) {
     toast(`${error.code || "ERROR"}: ${error.message}`, true);
   }
