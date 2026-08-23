@@ -2,9 +2,7 @@ from __future__ import annotations
 
 import hmac
 import json
-import mimetypes
 import re
-from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from typing import Any, Callable
@@ -25,7 +23,7 @@ ASSETS = {
 
 def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
-        server_version = "SherlockOSA/0.2.0"
+        server_version = "SherlockOSA/0.3.0"
         sys_version = ""
 
         def log_message(self, format_string: str, *args: object) -> None:
@@ -145,6 +143,12 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
             if path == "/api/v1/capabilities":
                 self._json(200, service.capabilities())
                 return
+            if path == "/api/v1/research/sources":
+                sources = getattr(service, "research_sources", None)
+                if not callable(sources):
+                    raise SherlockError("RESEARCH_UNAVAILABLE", "Research service nie jest podpięty.", status=503)
+                self._json(200, sources())
+                return
             if path == "/api/v1/missions":
                 self._json(200, service.list_missions())
                 return
@@ -197,6 +201,7 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
                         {
                             "mission_id": summary.get("mission_id"),
                             "purge": summary.get("purge"),
+                            "sources": summary.get("sources"),
                         },
                     )
                 except SherlockError as exc:
