@@ -8,16 +8,6 @@ const state = {
   lastBundle: null,
 };
 
-const researchCapabilities = [
-  "osint.research.run",
-  "osint.correlation.expand",
-  "osint.email.lookup",
-  "osint.username.lookup",
-  "osint.url.trace",
-  "osint.domain.passive",
-  "intel.indicator.enrich",
-];
-
 function toast(message, error = false) {
   const element = $("#toast");
   element.textContent = message;
@@ -52,14 +42,11 @@ function missionPayload(form) {
   const mode = field(form, "mode");
   const portRaw = field(form, "port");
   const ports = portRaw && mode !== "RESEARCH_PASSIVE" ? [Number(portRaw)] : [];
-  const capabilities = mode === "RESEARCH_PASSIVE"
-    ? researchCapabilities
-    : [field(form, "capability")];
   return {
     goal: field(form, "goal"),
     mode,
     targets: [{ kind: field(form, "target_kind"), value: field(form, "target_value"), ports }],
-    allowed_capabilities: capabilities,
+    allowed_capabilities: [field(form, "capability")],
     ttl_minutes: Number(field(form, "ttl_minutes")),
     operator_id: field(form, "operator_id"),
   };
@@ -75,30 +62,17 @@ function routeFor(mode) {
 
 function renderResult(bundle) {
   const panel = $("#result");
-  let facts;
-  if (bundle.research) {
-    const research = bundle.research || {};
-    facts = [
-      ["STATUS", research.status || "UNKNOWN"],
-      ["IDENTIFIERS", String(research.identifiers_seen ?? "UNKNOWN")],
-      ["EVIDENCE", String(research.evidence?.length ?? "UNKNOWN")],
-      ["TAINTED", String(research.tainted_evidence ?? "UNKNOWN")],
-      ["STOP", research.stop_reason || "UNKNOWN"],
-      ["PURGE", bundle.purge?.performed === true ? "DONE" : "OFF"],
-    ];
-  } else {
-    const mission = bundle.mission?.mission || {};
-    const decision = bundle.decision?.decision || {};
-    const receipt = bundle.execution?.receipt || {};
-    const replay = bundle.replay || {};
-    const isPublicReplay = bundle.deployment_mode === "PUBLIC_REPLAY_DEMO";
-    facts = [
-      ["ENGINE", isPublicReplay ? "REPLAY VECTOR" : (mission.engine_state || "UNKNOWN")],
-      ["POLICY", decision.effect || "UNKNOWN"],
-      ["NETWORK EFFECT", String(receipt.network_effect_performed ?? "UNKNOWN").toUpperCase()],
-      ["REPLAY", replay.valid === true ? "VALID" : "UNKNOWN"],
-    ];
-  }
+  const mission = bundle.mission?.mission || {};
+  const decision = bundle.decision?.decision || {};
+  const receipt = bundle.execution?.receipt || {};
+  const replay = bundle.replay || {};
+  const isPublicReplay = bundle.deployment_mode === "PUBLIC_REPLAY_DEMO";
+  const facts = [
+    ["ENGINE", isPublicReplay ? "REPLAY VECTOR" : (mission.engine_state || "UNKNOWN")],
+    ["POLICY", decision.effect || "UNKNOWN"],
+    ["NETWORK EFFECT", String(receipt.network_effect_performed ?? "UNKNOWN").toUpperCase()],
+    ["REPLAY", replay.valid === true ? "VALID" : "UNKNOWN"],
+  ];
   const grid = $("#result-grid");
   grid.replaceChildren(...facts.map(([label, value]) => {
     const article = document.createElement("article");
@@ -119,13 +93,11 @@ async function runFlow(event) {
   const form = event.currentTarget;
   const button = form.querySelector("button[type=submit]");
   button.disabled = true;
-  const payload = missionPayload(form);
   button.textContent = state.deploymentMode === "PUBLIC_REPLAY_DEMO"
     ? "WERYFIKACJA PUBLICZNEGO REPLAYU…"
-    : payload.mode === "RESEARCH_PASSIVE"
-      ? "RESEARCH: FAN-OUT → CORRELATE → VERIFY…"
-      : "WYKONYWANIE KONTROLOWANEGO FLOW…";
+    : "WYKONYWANIE KONTROLOWANEGO FLOW…";
   try {
+    const payload = missionPayload(form);
     if (state.deploymentMode === "PUBLIC_REPLAY_DEMO") {
       const bundle = await api(
         "/api/v1/demo/replay",
@@ -137,28 +109,9 @@ async function runFlow(event) {
       toast("Replay VALID. Live Engine i efekty sieciowe nie zostały uruchomione.");
       return;
     }
-
     const missionResponse = await api("/api/v1/missions", { method: "POST", body: JSON.stringify(payload) });
     const mission = missionResponse.mission;
     state.lastMission = mission;
-
-    if (payload.mode === "RESEARCH_PASSIVE") {
-      const purgeControl = form.elements.namedItem("purge_after");
-      const researchResponse = await api("/api/v1/research", {
-        method: "POST",
-        body: JSON.stringify({
-          mission_id: mission.mission_id,
-          purge_after: Boolean(purgeControl?.checked),
-        }),
-      });
-      const bundle = { mission: missionResponse, ...researchResponse };
-      state.lastBundle = bundle;
-      renderResult(bundle);
-      const tainted = researchResponse.research?.tainted_evidence ?? 0;
-      toast(`Research zakończony // evidence ${researchResponse.research?.evidence?.length ?? 0} // tainted ${tainted}.`);
-      return;
-    }
-
     const capability = payload.allowed_capabilities[0];
     const needsPort = ["lab.http.probe", "lab.network.scan", "external.http.probe", "external.network.scan"].includes(capability);
     const decisionPayload = {
@@ -189,28 +142,10 @@ async function runFlow(event) {
     toast(`${error.code || "ERROR"}: ${error.message}`, true);
   } finally {
     button.disabled = false;
-    updateFormMode();
+    button.textContent = state.deploymentMode === "PUBLIC_REPLAY_DEMO"
+      ? "REPLAY VECTOR → BROKER → EVIDENCE"
+      : "ENGINE → SIGN → DECIDE → SIMULATE";
   }
-}
-
-function updateFormMode() {
-  const form = $("#mission-form");
-  const mode = field(form, "mode");
-  const button = $("#submit-flow");
-  const capability = form.elements.namedItem("capability");
-  const port = form.elements.namedItem("port");
-  const purge = form.elements.namedItem("purge_after");
-  if (state.deploymentMode === "PUBLIC_REPLAY_DEMO") return;
-  const research = mode === "RESEARCH_PASSIVE";
-  capability.disabled = research;
-  port.disabled = research;
-  if (purge) purge.disabled = !research;
-  button.textContent = research
-    ? "ENGINE → RESEARCH → CORRELATE → PURGE"
-    : "ENGINE → SIGN → DECIDE → SIMULATE";
-  $("#form-note").textContent = research
-    ? "Publiczne/pasywne źródła only. 300 s hard stop, poison gate i local purge."
-    : "LAB worker pozostaje kontrolowany przez podpisany scope i deterministic broker.";
 }
 
 function configurePublicReplay() {
@@ -240,9 +175,6 @@ function configurePublicReplay() {
   for (const option of capabilitySelect.options) {
     option.disabled = !demoCapabilities.has(option.value);
   }
-  capabilitySelect.value = "lab.http.probe";
-  const purge = form.elements.namedItem("purge_after");
-  if (purge) purge.disabled = true;
 
   const replaySteps = [
     "Load bundled OSA receipt vector",
@@ -258,10 +190,10 @@ function configurePublicReplay() {
   $("#deployment-mode").classList.add("online");
   $("#deployment-mode").innerHTML = "<i></i> PUBLIC REPLAY";
   $("#mission-intro").textContent =
-    "Publiczny deploy odtwarza jawnie oznaczony wektor receiptu OSA. Live research source pack działa wyłącznie w prywatnym runtime.";
+    "Publiczny deploy odtwarza jawnie oznaczony wektor receiptu OSA przez prawdziwy podpis, broker, worker symulacyjny i hash-chain. Nie wywołuje live Engine, sieci ani shella.";
   $("#submit-flow").textContent = "REPLAY VECTOR → BROKER → EVIDENCE";
   $("#form-note").textContent =
-    "Tryb publiczny jest stateless i LAB-only. Research wymaga prywatnego runtime połączonego z OSA Engine.";
+    "Tryb publiczny jest stateless i LAB-only. Nowe misje wykonawcze wymagają prywatnego runtime połączonego z OSA Engine.";
 }
 
 async function loadStatus() {
@@ -274,7 +206,6 @@ async function loadStatus() {
       ? "<i></i> DEMO ONLINE"
       : "<i></i> API ONLINE";
     if (state.deploymentMode === "PUBLIC_REPLAY_DEMO") configurePublicReplay();
-    else updateFormMode();
     if (health.status !== "OK") status.textContent = `API ${health.status}`;
   } catch {
     $("#service-status").textContent = "API OFFLINE";
@@ -307,7 +238,7 @@ async function loadReferences() {
       return card;
     });
     $("#repo-grid").replaceChildren(...cards);
-  } catch {
+  } catch (error) {
     $("#repo-count").textContent = "BENCHMARK UNAVAILABLE";
   }
 }
@@ -338,7 +269,6 @@ async function verifyLedger() {
 const savedToken = sessionStorage.getItem("sherlock_api_key");
 if (savedToken) $("#api-key").value = savedToken;
 $("#mission-form").addEventListener("submit", runFlow);
-$("#mission-form").elements.namedItem("mode").addEventListener("change", updateFormMode);
 $("#verify-ledger").addEventListener("click", verifyLedger);
 loadStatus();
 loadReferences();
