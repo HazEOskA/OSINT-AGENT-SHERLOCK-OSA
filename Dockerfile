@@ -8,7 +8,7 @@ RUN groupadd --system sherlock && useradd --system --gid sherlock --create-home 
 WORKDIR /app
 COPY pyproject.toml README.md LICENSE NOTICE ./
 COPY src ./src
-RUN python -m pip install --no-cache-dir '.[research]'
+RUN python -m pip install --no-cache-dir .
 
 USER sherlock
 EXPOSE 8787
