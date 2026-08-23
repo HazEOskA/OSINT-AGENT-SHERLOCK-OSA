@@ -88,21 +88,21 @@ WAYBACK_URL = SourceDescriptor(
     name="wayback.url",
     supported_kinds=frozenset({IdentifierKind.URL}),
     required_capability="osint.url.trace",
-    max_identifier_depth=3,
+    max_identifier_depth=2,
 )
 
 WAYBACK_DOMAIN = SourceDescriptor(
     name="wayback.domain",
     supported_kinds=frozenset({IdentifierKind.DOMAIN}),
     required_capability="osint.domain.passive",
-    max_identifier_depth=2,
+    max_identifier_depth=1,
 )
 
 CRTSH_DOMAIN = SourceDescriptor(
     name="crtsh.domain",
     supported_kinds=frozenset({IdentifierKind.DOMAIN}),
     required_capability="osint.domain.passive",
-    max_identifier_depth=2,
+    max_identifier_depth=1,
 )
 
 SOURCE_DESCRIPTORS = (HOLEHE, MAIGRET, WAYBACK_URL, WAYBACK_DOMAIN, CRTSH_DOMAIN)
