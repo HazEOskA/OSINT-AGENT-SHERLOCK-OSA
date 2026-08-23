@@ -101,9 +101,9 @@ class IsolatedSourceModule(ResearchModule):
                 confidence=0.0,
             )
         remaining = context.remaining_seconds
-        if remaining <= 0:
+        if remaining <= 1.0:
             raise TimeoutError("research deadline reached")
-        timeout = max(1.0, min(remaining, 60.0))
+        timeout = max(0.5, min(55.0, remaining - 0.5))
         process = await asyncio.create_subprocess_exec(
             sys.executable,
             "-m",
@@ -126,9 +126,19 @@ class IsolatedSourceModule(ResearchModule):
         try:
             stdout, stderr = await asyncio.wait_for(process.communicate(request), timeout=timeout)
         except TimeoutError:
-            process.kill()
+            try:
+                process.kill()
+            except ProcessLookupError:
+                pass
             await process.communicate()
             raise TimeoutError(f"{self.name} exceeded {timeout:.1f}s")
+        except asyncio.CancelledError:
+            try:
+                process.kill()
+            except ProcessLookupError:
+                pass
+            await process.communicate()
+            raise
 
         if len(stdout) > 2_000_000:
             raise RuntimeError(f"{self.name} returned an oversized payload")
