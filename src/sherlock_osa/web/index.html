@@ -37,8 +37,8 @@
         <div class="scope-head"><span>RESEARCH_SCOPE</span><b>FAIL-CLOSED</b></div>
         <pre><code>{
   "mode": "RESEARCH_PASSIVE",
-  "seed": "email | username | url",
-  "sources": ["Holehe", "Maigret"],
+  "seed": "email | username | url | domain",
+  "sources": ["Holehe", "Maigret", "Wayback", "crt.sh"],
   "hard_deadline": "300s",
   "poisoned_pivot": "BLOCK"
 }</code></pre>
@@ -48,7 +48,7 @@
 
     <section class="metrics" aria-label="Status systemu">
       <article><span>ROUTER</span><strong>OSA ENGINE</strong><small>jedyny router intencji</small></article>
-      <article><span>RESEARCH</span><strong>BOUNDED FAN-OUT</strong><small>Holehe + Maigret source pack</small></article>
+      <article><span>RESEARCH</span><strong>BOUNDED FAN-OUT</strong><small>accounts + profiles + archive + CT</small></article>
       <article><span>TRUST</span><strong>POISON GATE</strong><small>tainted evidence nie pivotuje</small></article>
       <article><span>RETENTION</span><strong>EPHEMERAL</strong><small>local purge domyślnie ON</small></article>
     </section>
@@ -60,8 +60,8 @@
       </div>
       <div class="zone-grid">
         <article class="zone active"><span class="zone-no">01</span><h3>Control</h3><p>Engine, podpisany scope, deterministic capability broker.</p><small>BACKED</small></article>
-        <article class="zone active"><span class="zone-no">02</span><h3>Sources</h3><p>Izolowane subprocessy źródeł. Target przez stdin, timeout i kill boundary.</p><small>PINNED DEPENDENCIES</small></article>
-        <article class="zone active"><span class="zone-no">03</span><h3>Correlation</h3><p>Email → username/domain; profile → URL/ID; dedupe i bounded pivots.</p><small>BACKED LOCAL</small></article>
+        <article class="zone active"><span class="zone-no">02</span><h3>Sources</h3><p>Holehe, Maigret, Wayback CDX i crt.sh w killowalnych subprocessach.</p><small>BOUNDED NETWORK SOURCES</small></article>
+        <article class="zone active"><span class="zone-no">03</span><h3>Correlation</h3><p>Email → username/domain → profile URL → archive/subdomain; typed pivots i dedupe.</p><small>BACKED LOCAL</small></article>
         <article class="zone active"><span class="zone-no">04</span><h3>Evidence</h3><p>Poison checker, hash metadata, brak raw evidence w DB, purge po wyniku.</p><small>BACKED</small></article>
       </div>
     </section>
@@ -71,10 +71,10 @@
         <p class="eyebrow">CONTROLLED ENTRYPOINT</p>
         <h2>Utwórz podpisany research scope</h2>
         <p id="mission-intro">W trybie RESEARCH_PASSIVE panel tworzy misję przez OSA Engine, a następnie uruchamia bounded source pack.
-          Wyniki zdalne są traktowane jako niezaufane dane; podejrzany payload może zostać evidence, ale nie dostanie prawa do kolejnego pivotu.</p>
+          Wyniki zdalne są niezaufanymi danymi; podejrzany payload może zostać evidence, ale nie dostanie prawa do kolejnego pivotu.</p>
         <ol class="flow-list">
           <li><b>01</b><span>OSA Engine scope</span></li>
-          <li><b>02</b><span>Holehe / Maigret fan-out</span></li>
+          <li><b>02</b><span>Account / profile / archive / CT fan-out</span></li>
           <li><b>03</b><span>Poison + normalization</span></li>
           <li><b>04</b><span>Correlation + trusted pivots</span></li>
           <li><b>05</b><span>Report + local purge</span></li>
@@ -112,7 +112,7 @@
             </select>
           </label>
           <label>Target
-            <input name="target_value" placeholder="name@example.com / username / https://…" required>
+            <input name="target_value" placeholder="name@example.com / username / https://… / example.com" required>
           </label>
         </div>
         <div class="form-row">
