@@ -10,17 +10,53 @@ from sherlock_osa.contracts import (
     require_string,
 )
 from sherlock_osa.errors import SherlockError
-from sherlock_osa.research import BoundedResearchEngine, EventSink, ResearchIdentifier
+from sherlock_osa.research import (
+    BoundedResearchEngine,
+    EventSink,
+    ResearchBudget,
+    ResearchIdentifier,
+    SeedExpansionModule,
+)
 from sherlock_osa.service import MissionService
 from sherlock_osa.signing import sha256_json, verify_scope
+from sherlock_osa.source_pack import build_source_modules, source_health
 
 
 class ResearchMissionService(MissionService):
-    """MissionService extension: OSA Engine scope remains the gate; research core stays bounded."""
+    """MissionService extension: OSA Engine scope remains the gate; research stays bounded."""
 
     def __init__(self, *args: Any, research_engine: BoundedResearchEngine | None = None, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.research_engine = research_engine or BoundedResearchEngine()
+        self.research_engine = research_engine or BoundedResearchEngine(
+            modules=(SeedExpansionModule(), *build_source_modules()),
+            budget=ResearchBudget(
+                hard_timeout_seconds=300.0,
+                per_module_timeout_seconds=60.0,
+                max_depth=4,
+                max_identifiers=256,
+                max_evidence=1000,
+                max_module_invocations=1200,
+                max_parallel=24,
+                no_progress_rounds=2,
+            ),
+        )
+
+    def research_sources(self) -> dict[str, object]:
+        health = source_health()
+        return {
+            **health,
+            "engine": {
+                "hard_timeout_seconds": self.research_engine.budget.hard_timeout_seconds,
+                "per_module_timeout_seconds": self.research_engine.budget.per_module_timeout_seconds,
+                "max_depth": self.research_engine.budget.max_depth,
+                "max_identifiers": self.research_engine.budget.max_identifiers,
+            },
+            "truth": (
+                "DEPENDENCIES_VERIFIED; live source reachability is evaluated per lookup."
+                if health["all_dependencies_available"] and health["all_versions_pinned"]
+                else "SOURCE_PACK_DEGRADED; one or more pinned dependencies are unavailable or drifted."
+            ),
+        }
 
     def _prepare_research(self, raw: object) -> tuple[object, tuple[ResearchIdentifier, ...], bool]:
         data = require_mapping(raw, field_name="research")
@@ -74,7 +110,6 @@ class ResearchMissionService(MissionService):
         )
         result_dict = result.to_dict()
 
-        # Evidence ledger receives only aggregate/hash metadata here. Raw module payloads stay ephemeral.
         self.ledger.append(
             "RESEARCH_COMPLETED",
             {
@@ -88,9 +123,7 @@ class ResearchMissionService(MissionService):
                 "evidence_count": len(result.evidence),
                 "tainted_evidence": result.tainted_evidence,
                 "result_sha256": result.result_sha256,
-                "seed_set_sha256": sha256_json(
-                    sorted(identifier.key for identifier in seeds)
-                ),
+                "seed_set_sha256": sha256_json(sorted(identifier.key for identifier in seeds)),
             },
         )
 
@@ -129,4 +162,5 @@ class ResearchMissionService(MissionService):
             "mission_id": scope.mission_id,
             "research": result_dict,
             "purge": dict(purge),
+            "sources": self.research_sources(),
         }
