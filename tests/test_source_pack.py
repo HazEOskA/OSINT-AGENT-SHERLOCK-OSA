@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 from sherlock_osa.research import IdentifierKind, ModuleContext, ResearchIdentifier
 from sherlock_osa.source_pack import HOLEHE, WORKER_PROTOCOL, IsolatedSourceModule
-from sherlock_osa.source_worker import _extract_pivots
+from sherlock_osa.source_worker import _extract_pivots, _parse_crtsh_names, _parse_wayback_rows
 
 
 class FakeProcess:
@@ -72,6 +72,28 @@ class SourcePackTests(unittest.TestCase):
     def test_invalid_url_is_not_promoted_to_pivot(self) -> None:
         pivots = _extract_pivots({"website": "javascript:alert(1)"})
         self.assertEqual(pivots, [])
+
+    def test_wayback_rows_require_header_and_http_url(self) -> None:
+        payload = [
+            ["timestamp", "original", "statuscode", "mimetype"],
+            ["20250101000000", "https://example.com/a", "200", "text/html"],
+            ["20250102000000", "javascript:alert(1)", "200", "text/html"],
+        ]
+        rows = _parse_wayback_rows(payload)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["original"], "https://example.com/a")
+
+    def test_crtsh_names_stay_inside_target_domain(self) -> None:
+        payload = [
+            {"common_name": "api.example.com", "name_value": "*.example.com\ncdn.example.com"},
+            {"common_name": "evil-example.com", "name_value": "other.test"},
+        ]
+        names = _parse_crtsh_names(payload, "example.com")
+        self.assertIn("api.example.com", names)
+        self.assertIn("example.com", names)
+        self.assertIn("cdn.example.com", names)
+        self.assertNotIn("evil-example.com", names)
+        self.assertNotIn("other.test", names)
 
 
 if __name__ == "__main__":
