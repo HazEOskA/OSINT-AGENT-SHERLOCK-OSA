@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <title>Sherlock OSA — Controlled Agent Security Lab</title>
+  <title>Sherlock OSA — Evidence-First Research Runtime</title>
   <link rel="stylesheet" href="/assets/styles.css">
 </head>
 <body>
@@ -12,7 +12,7 @@
   <header class="topbar">
     <a class="brand" href="#top" aria-label="Sherlock OSA">
       <span class="brand-mark">S//O</span>
-      <span><strong>SHERLOCK OSA</strong><small>CONTROLLED AGENT SECURITY LAB</small></span>
+      <span><strong>SHERLOCK OSA</strong><small>EVIDENCE-FIRST RESEARCH RUNTIME</small></span>
     </a>
     <div class="status-row">
       <span class="pill pill-green"><i></i> DEFAULT DENY</span>
@@ -24,23 +24,23 @@
   <main id="top">
     <section class="hero">
       <div class="hero-copy">
-        <p class="eyebrow">EVIDENCE BEFORE EXECUTION // v0.1.1</p>
-        <h1>Nie ufaj agentowi.<br><em>Ogranicz jego świat.</em></h1>
-        <p class="lead">OSA Engine prowadzi misję. Deterministyczny broker blokuje wszystko,
-          czego nie ma w podpisanym scope. Każda decyzja trafia do weryfikowalnego ledgeru.</p>
+        <p class="eyebrow">BOUNDED RESEARCH // v0.3.0</p>
+        <h1>Nie szukaj tylko konta.<br><em>Śledź wiarygodne powiązania.</em></h1>
+        <p class="lead">OSA Engine podpisuje zakres. Sherlock fan-outuje pasywne źródła, normalizuje evidence,
+          koreluje nowe identyfikatory i zatrzymuje recursion przy 300 s, wyczerpaniu budżetu albo braku zaufanych pivotów.</p>
         <div class="hero-actions">
-          <a class="button primary" href="#mission">Utwórz misję testową</a>
+          <a class="button primary" href="#mission">Uruchom kontrolowany research</a>
           <button class="button ghost" id="verify-ledger" type="button">Zweryfikuj ledger</button>
         </div>
       </div>
       <div class="scope-card">
-        <div class="scope-head"><span>MISSION_SCOPE</span><b>FAIL-CLOSED</b></div>
+        <div class="scope-head"><span>RESEARCH_SCOPE</span><b>FAIL-CLOSED</b></div>
         <pre><code>{
-  "mode": "LAB_RANGE",
-  "target": "lab://juice-shop",
-  "capability": "lab.http.probe",
-  "route": "range-only",
-  "network_effect": false
+  "mode": "RESEARCH_PASSIVE",
+  "seed": "email | username | url",
+  "sources": ["Holehe", "Maigret"],
+  "hard_deadline": "300s",
+  "poisoned_pivot": "BLOCK"
 }</code></pre>
         <div class="scope-foot"><span>ENGINE PIN</span><code>f365360…ce38d</code></div>
       </div>
@@ -48,37 +48,36 @@
 
     <section class="metrics" aria-label="Status systemu">
       <article><span>ROUTER</span><strong>OSA ENGINE</strong><small>jedyny router intencji</small></article>
-      <article><span>POLICY</span><strong>OUT-OF-MODEL</strong><small>deterministyczny broker</small></article>
-        <article><span>EXECUTION</span><strong>SIMULATION</strong><small>zero efektu sieciowego v0.1.1</small></article>
-      <article><span>EVIDENCE</span><strong>SHA-256</strong><small>append + replay</small></article>
+      <article><span>RESEARCH</span><strong>BOUNDED FAN-OUT</strong><small>Holehe + Maigret source pack</small></article>
+      <article><span>TRUST</span><strong>POISON GATE</strong><small>tainted evidence nie pivotuje</small></article>
+      <article><span>RETENTION</span><strong>EPHEMERAL</strong><small>local purge domyślnie ON</small></article>
     </section>
 
     <section class="section architecture">
       <div class="section-title">
-        <p class="eyebrow">TRUST ZONES</p>
-        <h2>Jedna misja. Cztery rozdzielone płaszczyzny.</h2>
+        <p class="eyebrow">RESEARCH PIPELINE</p>
+        <h2>Jedna misja. Kontrolowana rekurencja.</h2>
       </div>
       <div class="zone-grid">
-        <article class="zone active"><span class="zone-no">01</span><h3>Control</h3><p>Engine, scope, podpis, approval i kill-switch.</p><small>PRIVATE RUNTIME + PUBLIC REPLAY</small></article>
-        <article class="zone"><span class="zone-no">02</span><h3>Research</h3><p>Pasywne źródła przez wymuszoną trasę, bez swobodnego egressu.</p><small>UNBACKED</small></article>
-        <article class="zone"><span class="zone-no">03</span><h3>Range</h3><p>Disposable targety, worker microVM i wyłącznie route range-only.</p><small>UNBACKED</small></article>
-        <article class="zone"><span class="zone-no">04</span><h3>Blue + Evidence</h3><p>Telemetria tej samej misji, patch, replay i retest.</p><small>LEDGER BACKED</small></article>
+        <article class="zone active"><span class="zone-no">01</span><h3>Control</h3><p>Engine, podpisany scope, deterministic capability broker.</p><small>BACKED</small></article>
+        <article class="zone active"><span class="zone-no">02</span><h3>Sources</h3><p>Izolowane subprocessy źródeł. Target przez stdin, timeout i kill boundary.</p><small>PINNED DEPENDENCIES</small></article>
+        <article class="zone active"><span class="zone-no">03</span><h3>Correlation</h3><p>Email → username/domain; profile → URL/ID; dedupe i bounded pivots.</p><small>BACKED LOCAL</small></article>
+        <article class="zone active"><span class="zone-no">04</span><h3>Evidence</h3><p>Poison checker, hash metadata, brak raw evidence w DB, purge po wyniku.</p><small>BACKED</small></article>
       </div>
     </section>
 
     <section class="section mission-layout" id="mission">
       <div class="mission-copy">
-        <p class="eyebrow">SAFE VERTICAL SLICE</p>
-        <h2>Utwórz podpisany scope</h2>
-        <p id="mission-intro">Panel najpierw wysyła intencję do OSA Engine. Dopiero receipt Engine zostaje
-          związany z lokalnym targetem i podpisany. W v0.1.1 zatwierdzona operacja nadal
-          kończy się wyłącznie symulacją.</p>
+        <p class="eyebrow">CONTROLLED ENTRYPOINT</p>
+        <h2>Utwórz podpisany research scope</h2>
+        <p id="mission-intro">W trybie RESEARCH_PASSIVE panel tworzy misję przez OSA Engine, a następnie uruchamia bounded source pack.
+          Wyniki zdalne są traktowane jako niezaufane dane; podejrzany payload może zostać evidence, ale nie dostanie prawa do kolejnego pivotu.</p>
         <ol class="flow-list">
-          <li><b>01</b><span>Engine resolve + run</span></li>
-          <li><b>02</b><span>HMAC mission scope</span></li>
-          <li><b>03</b><span>Capability decision</span></li>
-          <li><b>04</b><span>Simulation + evidence</span></li>
-          <li><b>05</b><span>Deterministic replay</span></li>
+          <li><b>01</b><span>OSA Engine scope</span></li>
+          <li><b>02</b><span>Holehe / Maigret fan-out</span></li>
+          <li><b>03</b><span>Poison + normalization</span></li>
+          <li><b>04</b><span>Correlation + trusted pivots</span></li>
+          <li><b>05</b><span>Report + local purge</span></li>
         </ol>
       </div>
 
@@ -87,65 +86,70 @@
           <input id="api-key" name="api_key" type="password" autocomplete="off" placeholder="SHERLOCK_API_KEY" required>
         </label>
         <label>Cel misji
-          <textarea name="goal" rows="3" required>Sprawdź przepływ policy i evidence dla Juice Shop w izolowanym labie</textarea>
+          <textarea name="goal" rows="3" required>Zbierz pasywne publiczne ślady, skoreluj wiarygodne identyfikatory i zwróć evidence-first report</textarea>
         </label>
         <div class="form-row">
           <label>Tryb
             <select name="mode">
+              <option value="RESEARCH_PASSIVE" selected>RESEARCH_PASSIVE</option>
               <option value="LAB_RANGE">LAB_RANGE</option>
-              <option value="RESEARCH_PASSIVE">RESEARCH_PASSIVE</option>
               <option value="AUTHORIZED_EXTERNAL">AUTHORIZED_EXTERNAL — BLOCKED</option>
             </select>
           </label>
           <label>TTL (min)
-            <input name="ttl_minutes" type="number" min="1" max="1440" value="30" required>
+            <input name="ttl_minutes" type="number" min="1" max="1440" value="10" required>
           </label>
         </div>
         <div class="form-row">
           <label>Typ targetu
             <select name="target_kind">
-              <option value="LAB_ASSET">LAB_ASSET</option>
+              <option value="EMAIL">EMAIL</option>
               <option value="USERNAME">USERNAME</option>
+              <option value="URL">URL</option>
               <option value="DOMAIN">DOMAIN</option>
               <option value="INDICATOR">INDICATOR</option>
+              <option value="LAB_ASSET">LAB_ASSET</option>
             </select>
           </label>
           <label>Target
-            <input name="target_value" value="lab://juice-shop" required>
+            <input name="target_value" placeholder="name@example.com / username / https://…" required>
           </label>
         </div>
         <div class="form-row">
-          <label>Capability
+          <label>Capability / lab operation
             <select name="capability">
+              <option value="osint.research.run">osint.research.run</option>
               <option value="lab.http.probe">lab.http.probe</option>
               <option value="lab.network.scan">lab.network.scan</option>
               <option value="lab.attack.simulate">lab.attack.simulate</option>
               <option value="blue.telemetry.replay">blue.telemetry.replay</option>
-              <option value="osint.username.lookup">osint.username.lookup</option>
-              <option value="osint.domain.passive">osint.domain.passive</option>
             </select>
           </label>
-          <label>Port
+          <label>Port (tylko lab/external)
             <input name="port" type="number" min="1" max="65535" value="3000">
           </label>
         </div>
         <label>Operator ID
           <input name="operator_id" value="osa" required>
         </label>
-        <button class="button primary full" id="submit-flow" type="submit">ENGINE → SIGN → DECIDE → SIMULATE</button>
-        <p class="form-note" id="form-note">Żaden skaner ani shell nie zostanie uruchomiony w tym release.</p>
+        <label>
+          <input name="purge_after" type="checkbox" checked>
+          Usuń lokalny scope i decyzje po zwróceniu research reportu
+        </label>
+        <button class="button primary full" id="submit-flow" type="submit">ENGINE → RESEARCH → CORRELATE → PURGE</button>
+        <p class="form-note" id="form-note">Publiczne/pasywne źródła only. Brak breach dumpów, stealer logs i zewnętrznego kasowania danych w tym release.</p>
       </form>
     </section>
 
     <section class="section result-panel" id="result" hidden>
-      <div class="section-title"><p class="eyebrow">MISSION RECEIPT</p><h2>Wynik kontrolowanego przepływu</h2></div>
+      <div class="section-title"><p class="eyebrow">RESEARCH RECEIPT</p><h2>Wynik kontrolowanego przepływu</h2></div>
       <div class="result-grid" id="result-grid"></div>
       <pre class="result-json"><code id="result-json"></code></pre>
     </section>
 
     <section class="section references">
       <div class="section-title row-title">
-        <div><p class="eyebrow">20 REFERENCE SYSTEMS</p><h2>Z najlepszych wzorców, bez licencyjnego chaosu.</h2></div>
+        <div><p class="eyebrow">REFERENCE SYSTEMS</p><h2>Wzorce źródeł i kontroli, bez udawania własności ich kodu.</h2></div>
         <span id="repo-count">ŁADOWANIE…</span>
       </div>
       <div class="repo-grid" id="repo-grid"></div>
@@ -153,7 +157,7 @@
   </main>
 
   <footer>
-    <span>SHERLOCK OSA v0.1.1 // APACHE-2.0</span>
+    <span>SHERLOCK OSA v0.3.0 // APACHE-2.0 CORE</span>
     <span>TRUTH BEFORE CONFIDENCE</span>
   </footer>
 
