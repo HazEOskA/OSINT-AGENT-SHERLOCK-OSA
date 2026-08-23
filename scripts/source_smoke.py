@@ -13,7 +13,13 @@ def main() -> int:
     if not health["all_versions_pinned"]:
         return 1
     sources = {item["name"]: item for item in health["sources"]}
-    required = {"holehe.email", "maigret.username"}
+    required = {
+        "holehe.email",
+        "maigret.username",
+        "wayback.url",
+        "wayback.domain",
+        "crtsh.domain",
+    }
     return 0 if required <= sources.keys() else 1
 
 
