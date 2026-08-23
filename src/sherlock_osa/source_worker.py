@@ -5,6 +5,9 @@ import json
 import logging
 import re
 import sys
+import urllib.error
+import urllib.parse
+import urllib.request
 from importlib.resources import files
 from typing import Any, Mapping
 from urllib.parse import urlsplit
@@ -14,6 +17,10 @@ from sherlock_osa.source_pack import WORKER_PROTOCOL
 
 USERNAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 EMAIL_RE = re.compile(r"^[^\s@]{1,64}@[^\s@]{1,253}$")
+DOMAIN_RE = re.compile(
+    r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$"
+)
+MAX_HTTP_BYTES = 2_000_000
 
 
 def _jsonable(value: object, *, depth: int = 0) -> Any:
@@ -39,6 +46,28 @@ def _candidate_values(value: object) -> list[str]:
     return []
 
 
+def _valid_domain(value: str) -> str | None:
+    normalized = value.strip().rstrip(".").casefold()
+    if normalized.startswith("*."):
+        normalized = normalized[2:]
+    if not DOMAIN_RE.fullmatch(normalized):
+        return None
+    return normalized
+
+
+def _valid_url(value: str) -> str | None:
+    candidate = value.strip()
+    if len(candidate) > 2048:
+        return None
+    try:
+        parsed = urlsplit(candidate)
+    except ValueError:
+        return None
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        return None
+    return candidate
+
+
 def _extract_pivots(ids_data: object) -> list[dict[str, str]]:
     pivots: list[dict[str, str]] = []
     seen: set[tuple[str, str]] = set()
@@ -53,12 +82,15 @@ def _extract_pivots(ids_data: object) -> list[dict[str, str]]:
             if not USERNAME_RE.fullmatch(normalized):
                 return
         elif kind == "URL":
-            try:
-                parsed = urlsplit(normalized)
-            except ValueError:
+            valid = _valid_url(normalized)
+            if valid is None:
                 return
-            if parsed.scheme not in {"http", "https"} or not parsed.hostname or len(normalized) > 2048:
+            normalized = valid
+        elif kind == "DOMAIN":
+            valid_domain = _valid_domain(normalized)
+            if valid_domain is None:
                 return
+            normalized = valid_domain
         key = (kind, normalized.casefold())
         if key in seen:
             return
@@ -109,6 +141,34 @@ def _read_request() -> dict[str, Any]:
         raise ValueError("invalid timeout") from exc
     data["timeout_seconds"] = max(1.0, min(timeout_value, 60.0))
     return data
+
+
+def _http_json(url: str, timeout_seconds: float) -> object:
+    request = urllib.request.Request(
+        url,
+        method="GET",
+        headers={
+            "Accept": "application/json",
+            "User-Agent": "sherlock-osa/0.3.0",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=max(1.0, min(timeout_seconds, 30.0))) as response:
+            content_type = response.headers.get("Content-Type", "")
+            raw = response.read(MAX_HTTP_BYTES + 1)
+    except urllib.error.HTTPError as exc:
+        exc.read(1024)
+        raise RuntimeError(f"source HTTP {exc.code}") from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise RuntimeError(f"source unavailable: {exc}") from exc
+    if len(raw) > MAX_HTTP_BYTES:
+        raise RuntimeError("source response too large")
+    if "json" not in content_type.casefold() and not raw.lstrip().startswith((b"[", b"{")):
+        raise RuntimeError("source did not return JSON")
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise RuntimeError("source returned invalid JSON") from exc
 
 
 def _holehe_lookup(email: str, timeout_seconds: float) -> dict[str, object]:
@@ -179,7 +239,7 @@ async def _maigret_lookup(username: str, timeout_seconds: float) -> dict[str, ob
     from maigret import search as maigret_search
     from maigret.sites import MaigretDatabase
 
-    resource = files("maigret").joinpath("resources", "data.json")
+    resource = files("maigret").joinpath("resources").joinpath("data.json")
     database = MaigretDatabase().load_from_path(str(resource))
     sites = database.ranked_sites_dict(top=500)
     logger = logging.getLogger("sherlock.maigret")
@@ -223,9 +283,10 @@ async def _maigret_lookup(username: str, timeout_seconds: float) -> dict[str, ob
             "ids_data": _jsonable(ids_data),
         }
         found.append(record)
-        if url_text.startswith(("http://", "https://")):
-            source_urls.append(url_text[:2048])
-            pivots.append({"kind": "URL", "value": url_text[:2048]})
+        valid_url = _valid_url(url_text)
+        if valid_url:
+            source_urls.append(valid_url)
+            pivots.append({"kind": "URL", "value": valid_url})
         pivots.extend(_extract_pivots(ids_data))
         if len(found) >= 75:
             break
@@ -257,6 +318,138 @@ async def _maigret_lookup(username: str, timeout_seconds: float) -> dict[str, ob
     }
 
 
+def _parse_wayback_rows(payload: object) -> list[dict[str, str]]:
+    if not isinstance(payload, list) or not payload:
+        return []
+    header = payload[0]
+    if not isinstance(header, list) or not all(isinstance(value, str) for value in header):
+        return []
+    indexes = {name: index for index, name in enumerate(header)}
+    required = {"timestamp", "original"}
+    if not required <= indexes.keys():
+        return []
+    rows: list[dict[str, str]] = []
+    for raw in payload[1:76]:
+        if not isinstance(raw, list):
+            continue
+        record: dict[str, str] = {}
+        valid = True
+        for key in ("timestamp", "original", "statuscode", "mimetype"):
+            index = indexes.get(key)
+            if index is None:
+                continue
+            if index >= len(raw) or not isinstance(raw[index], str):
+                valid = False
+                break
+            record[key] = raw[index][:2048]
+        if valid and _valid_url(record.get("original", "")):
+            rows.append(record)
+    return rows
+
+
+def _wayback_lookup(value: str, kind: str, timeout_seconds: float) -> dict[str, object]:
+    if kind == "URL":
+        target = _valid_url(value)
+        if target is None:
+            raise ValueError("wayback requires valid URL")
+        match_type = "exact"
+    elif kind == "DOMAIN":
+        target = _valid_domain(value)
+        if target is None:
+            raise ValueError("wayback requires valid DOMAIN")
+        match_type = "domain"
+    else:
+        raise ValueError("wayback requires URL or DOMAIN")
+
+    query = urllib.parse.urlencode(
+        {
+            "url": target,
+            "output": "json",
+            "fl": "timestamp,original,statuscode,mimetype",
+            "filter": "statuscode:200",
+            "collapse": "urlkey",
+            "matchType": match_type,
+            "limit": "75",
+        }
+    )
+    endpoint = f"https://web.archive.org/cdx/search/cdx?{query}"
+    rows = _parse_wayback_rows(_http_json(endpoint, timeout_seconds))
+    pivots: list[dict[str, str]] = []
+    source_urls: list[str] = []
+    for row in rows:
+        original = row["original"]
+        if kind == "DOMAIN":
+            pivots.append({"kind": "URL", "value": original})
+        timestamp = row.get("timestamp", "")
+        if timestamp:
+            source_urls.append(f"https://web.archive.org/web/{timestamp}/{original}"[:2048])
+    return {
+        "protocol": WORKER_PROTOCOL,
+        "ok": True,
+        "fields": {
+            "provider": "internet-archive-cdx",
+            "match_type": match_type,
+            "capture_count": len(rows),
+            "captures": rows,
+        },
+        "pivots": pivots[:75],
+        "source_urls": source_urls[:75],
+        "confidence": 0.95 if rows else 0.2,
+    }
+
+
+def _parse_crtsh_names(payload: object, target_domain: str) -> list[str]:
+    if not isinstance(payload, list):
+        return []
+    names: list[str] = []
+    seen: set[str] = set()
+    for row in payload[:500]:
+        if not isinstance(row, Mapping):
+            continue
+        candidates: list[str] = []
+        common_name = row.get("common_name")
+        name_value = row.get("name_value")
+        if isinstance(common_name, str):
+            candidates.append(common_name)
+        if isinstance(name_value, str):
+            candidates.extend(name_value.splitlines())
+        for candidate in candidates:
+            domain = _valid_domain(candidate)
+            if domain is None:
+                continue
+            if domain != target_domain and not domain.endswith(f".{target_domain}"):
+                continue
+            if domain in seen:
+                continue
+            seen.add(domain)
+            names.append(domain)
+            if len(names) >= 128:
+                return names
+    return names
+
+
+def _crtsh_lookup(domain: str, timeout_seconds: float) -> dict[str, object]:
+    target = _valid_domain(domain)
+    if target is None:
+        raise ValueError("crt.sh requires valid DOMAIN")
+    query = urllib.parse.urlencode({"q": f"%.{target}", "output": "json"})
+    endpoint = f"https://crt.sh/?{query}"
+    payload = _http_json(endpoint, timeout_seconds)
+    names = _parse_crtsh_names(payload, target)
+    return {
+        "protocol": WORKER_PROTOCOL,
+        "ok": True,
+        "fields": {
+            "provider": "crt.sh",
+            "domain_count": len(names),
+            "domains": names,
+        },
+        "pivots": [{"kind": "DOMAIN", "value": name} for name in names if name != target],
+        "source_urls": [f"https://crt.sh/?q={urllib.parse.quote(name, safe='')}" for name in names[:64]],
+        "confidence": 0.95 if names else 0.2,
+    }
+
+
 def _emit(payload: Mapping[str, object]) -> None:
     sys.stdout.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
     sys.stdout.flush()
@@ -277,6 +470,12 @@ def main() -> int:
             if kind != "USERNAME":
                 raise ValueError("maigret requires USERNAME")
             payload = asyncio.run(_maigret_lookup(value, timeout))
+        elif source in {"wayback.url", "wayback.domain"}:
+            payload = _wayback_lookup(value, kind, timeout)
+        elif source == "crtsh.domain":
+            if kind != "DOMAIN":
+                raise ValueError("crt.sh requires DOMAIN")
+            payload = _crtsh_lookup(value, timeout)
         else:
             raise ValueError("unknown source")
         _emit(payload)
