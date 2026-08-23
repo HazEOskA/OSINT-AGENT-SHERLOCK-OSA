@@ -41,6 +41,20 @@ class ResearchMissionService(MissionService):
             ),
         )
 
+    def health(self, *, probe_engine: bool = False) -> dict[str, object]:
+        base = super().health(probe_engine=probe_engine)
+        research = self.research_sources()
+        full_pack = bool(research["all_dependencies_available"]) and bool(research["all_versions_pinned"])
+        return {
+            **base,
+            "execution_backing": (
+                "SIMULATION_PLUS_FULL_BOUNDED_PASSIVE_RESEARCH"
+                if full_pack
+                else "SIMULATION_PLUS_PARTIAL_BOUNDED_PASSIVE_RESEARCH"
+            ),
+            "research": research,
+        }
+
     def research_sources(self) -> dict[str, object]:
         health = source_health()
         return {
