@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sherlock-osa"
-version = "0.2.0"
+version = "0.3.0"
 description = "Controlled, evidence-first agent security laboratory powered by OSA Execution Force Engine."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -19,6 +19,12 @@ classifiers = [
   "Topic :: Security",
 ]
 dependencies = []
+
+[project.optional-dependencies]
+research = [
+  "holehe==1.61",
+  "maigret==0.6.4",
+]
 
 [project.scripts]
 sherlock-osa = "sherlock_osa.cli:main"
