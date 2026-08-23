@@ -22,14 +22,25 @@ WORKER_PROTOCOL = "sherlock-source-worker.v1"
 @dataclass(frozen=True, slots=True)
 class SourceDescriptor:
     name: str
-    package: str
-    expected_version: str
     supported_kinds: frozenset[IdentifierKind]
     required_capability: str
     max_identifier_depth: int
+    package: str | None = None
+    expected_version: str | None = None
     network_effect: bool = True
 
     def health(self) -> dict[str, object]:
+        if self.package is None:
+            return {
+                "name": self.name,
+                "package": None,
+                "available": True,
+                "version": "builtin",
+                "expected_version": None,
+                "version_match": True,
+                "network_effect": self.network_effect,
+                "max_identifier_depth": self.max_identifier_depth,
+            }
         try:
             version = importlib.metadata.version(self.package)
         except importlib.metadata.PackageNotFoundError:
@@ -73,11 +84,32 @@ MAIGRET = SourceDescriptor(
     max_identifier_depth=1,
 )
 
-SOURCE_DESCRIPTORS = (HOLEHE, MAIGRET)
+WAYBACK_URL = SourceDescriptor(
+    name="wayback.url",
+    supported_kinds=frozenset({IdentifierKind.URL}),
+    required_capability="osint.url.trace",
+    max_identifier_depth=3,
+)
+
+WAYBACK_DOMAIN = SourceDescriptor(
+    name="wayback.domain",
+    supported_kinds=frozenset({IdentifierKind.DOMAIN}),
+    required_capability="osint.domain.passive",
+    max_identifier_depth=2,
+)
+
+CRTSH_DOMAIN = SourceDescriptor(
+    name="crtsh.domain",
+    supported_kinds=frozenset({IdentifierKind.DOMAIN}),
+    required_capability="osint.domain.passive",
+    max_identifier_depth=2,
+)
+
+SOURCE_DESCRIPTORS = (HOLEHE, MAIGRET, WAYBACK_URL, WAYBACK_DOMAIN, CRTSH_DOMAIN)
 
 
 class IsolatedSourceModule(ResearchModule):
-    """Run third-party OSINT libraries in a killable subprocess.
+    """Run network OSINT sources in a killable subprocess.
 
     Identifier values are sent over stdin instead of argv so they are not exposed in
     the process list. The parent process owns the hard timeout and can kill the worker.
