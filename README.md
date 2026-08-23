@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="Assets/sherlock-osa.png" alt="Sherlock OSA" width="360">
+<img src="Assets/OSINT-OSA.png" alt="Sherlock OSA" width="360">
 
 <h1>🕵️🐝 SHERLOCK OSA</h1>
 
@@ -487,6 +487,6 @@ external data deletion
 
 **NO DRIFT. NO FAKE PROOF. NO UNBOUNDED RECURSION.**
 
-<img src="Assets/sherlock-osa.png" alt="Sherlock OSA" width="180">
+<img src="Assets/OSINT-OSA.png" alt="Sherlock OSA" width="180">
 
 </div>
