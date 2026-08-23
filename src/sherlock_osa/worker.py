@@ -76,11 +76,13 @@ ADAPTERS = (
         (
             "osint.email.lookup",
             "osint.username.lookup",
+            "osint.url.trace",
+            "osint.domain.passive",
         ),
         BackingStatus.UNBACKED,
         True,
         False,
-        "Implemented as isolated Holehe 1.61 + Maigret 0.6.4 subprocess workers. Dependency/version health is mechanically checked; live Internet reachability is evaluated per lookup and is not globally claimed.",
+        "Implemented isolated source workers: Holehe 1.61, Maigret 0.6.4, Internet Archive CDX and crt.sh Certificate Transparency. Dependency/contract health is mechanically checked; live Internet reachability is evaluated per lookup and is not globally claimed.",
     ),
     AdapterDescriptor(
         "research.tor-worker",
