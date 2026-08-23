@@ -1,95 +1,244 @@
-# Sherlock OSA
+<div align="center">
 
-**Evidence-first, bounded OSINT research runtime sterowany przez OSA Execution Force Engine.**
+<img src="Assets/sherlock-osa.png" alt="Sherlock OSA" width="360">
 
-Sherlock OSA nie ufa modelowi językowemu jako granicy bezpieczeństwa. OSA Execution Force Engine prowadzi misję, deterministyczny broker egzekwuje podpisany scope, a research działa jako bounded fan-out → evidence → correlation → trusted pivots z twardym limitem 300 s.
+<h1>🕵️🐝 SHERLOCK OSA</h1>
 
-## Status v0.3.0
+<p><strong>Evidence-first, bounded OSINT research runtime powered by OSA Execution Force.</strong></p>
 
-### BACKED
+<p><em>Nie szukaj więcej. Udowodnij, skoreluj, zatrzymaj drift.</em></p>
 
-- jeden control plane przez OSA Execution Force Engine;
-- `RESEARCH_PASSIVE` dla `EMAIL | USERNAME | URL | DOMAIN | INDICATOR`;
-- recursive research kernel: dedupe, max depth, identifiers, evidence, invocations i 300 s hard deadline;
-- poison/injection checker: `TAINTED` evidence nie może tworzyć kolejnych pivotów;
-- SSE/JSON research endpoints;
-- target passive hashowany w evidence ledgerze;
-- raw source evidence pozostaje ephemeral;
-- `purge_after=true` usuwa lokalny scope i decisions z SQLite;
-- publiczny Vercel deploy pozostaje stateless LAB replay demo.
+<p>
+  <img alt="version v0.3.0" src="https://img.shields.io/badge/version-v0.3.0-FFC400?style=flat-square&labelColor=101014">
+  <img alt="python 3.12+" src="https://img.shields.io/badge/python-3.12%2B-FFC400?style=flat-square&labelColor=101014">
+  <img alt="research 300s hard stop" src="https://img.shields.io/badge/research-300s%20hard%20stop-FFC400?style=flat-square&labelColor=101014">
+  <img alt="source pack 4" src="https://img.shields.io/badge/source%20pack-4-FFC400?style=flat-square&labelColor=101014">
+</p>
 
-### SOURCE PACK v1
+<p>
+  <img alt="policy fail closed" src="https://img.shields.io/badge/policy-fail--closed-8B5CF6?style=flat-square&labelColor=101014">
+  <img alt="poison gate enabled" src="https://img.shields.io/badge/poison%20gate-enabled-8B5CF6?style=flat-square&labelColor=101014">
+  <img alt="retention ephemeral" src="https://img.shields.io/badge/retention-ephemeral-8B5CF6?style=flat-square&labelColor=101014">
+  <img alt="license Apache 2.0 core" src="https://img.shields.io/badge/core%20license-Apache--2.0-55555F?style=flat-square&labelColor=101014">
+</p>
 
-Network resolvers działają w killowalnych subprocessach. Target przechodzi przez `stdin`, nie argv.
+<p>
+  <img alt="CI" src="https://github.com/HazEOskA/OSINT-AGENT-SHERLOCK-OSA/actions/workflows/ci.yml/badge.svg">
+</p>
 
-- **Holehe 1.61** — `EMAIL` → account-registration signals na 100+ usługach; recovery email/phone hints są celowo odrzucane;
-- **Maigret 0.6.4** — `USERNAME` → profile discovery na top 500 publicznych serwisów per lookup, parsing profilu oraz kontrolowane `URL/EMAIL/USERNAME` pivots;
-- **Internet Archive CDX** — `URL | DOMAIN` → historyczne publiczne captures/URL-e;
-- **crt.sh Certificate Transparency** — `DOMAIN` → zwalidowane publiczne nazwy certyfikatów/subdomeny.
+</div>
 
-Provider-specific depth bounds zatrzymują powtórne masowe odpytywanie: Maigret `<=1`, Holehe `<=2`, Wayback URL `<=2`, Wayback domain `<=1`, crt.sh `<=1`.
+---
 
-**Truth boundary:** lokalna rejestracja source packa i wersje Holehe/Maigret są mechanicznie sprawdzane. Globalna dostępność Internetu ani konkretnej usługi nie jest deklarowana jako BACKED — jest oceniana per lookup.
+**Sherlock OSA is not another OSINT scraper.**
 
-## Architecture
+To jest kontrolowany research runtime, w którym model **nie dostaje prawa do rozszerzania świata tylko dlatego, że coś przeczytał w Internecie**.
 
-```text
-EMAIL / USERNAME / URL / DOMAIN / INDICATOR
-                    │
-                    ▼
-             OSA Engine Scope
-                    │
-             Capability Broker
-                    │
-                    ▼
-          Bounded Research Engine
-        ┌───────────┼──────────────┬───────────┐
-        ▼           ▼              ▼           ▼
- seed-expansion   Holehe         Maigret    Wayback / CT
-    local        subprocess      subprocess    subprocess
-        └───────────┴──────────────┴───────────┘
-                    ▼
-             normalized evidence
-                    │
-               PoisonChecker
-              ┌─────┴─────┐
-            CLEAN       TAINTED
-              │           └── no pivots
-              ▼
-          correlation/dedupe
-              │
-        trusted identifiers
-              │
-              └── bounded recursion
-                    │
-                    ▼
-                report/SSE
-                    │
-                    ▼
-             local DB purge
+`seed` → `scope` → `sources` → `evidence` → `poison gate` → `typed pivots` → `correlation` → `report`
+
+<div align="center">
+
+<h3><code>REMOTE DATA != TRUSTED INSTRUCTION</code></h3>
+<h3><code>TAINTED != PIVOT</code></h3>
+<h3><code>NO EVIDENCE != FACT</code></h3>
+
+</div>
+
+---
+
+## ⚡ Research Flow
+
+```mermaid
+flowchart LR
+    A([EMAIL / USERNAME / URL / DOMAIN / INDICATOR]) --> B[OSA Engine Scope]
+    B --> C[Capability Broker]
+    C --> D[Bounded Research Engine]
+
+    D --> E[Seed Expansion]
+    D --> F[Holehe]
+    D --> G[Maigret]
+    D --> H[Wayback CDX]
+    D --> I[crt.sh CT]
+
+    E --> J[Normalized Evidence]
+    F --> J
+    G --> J
+    H --> J
+    I --> J
+
+    J --> K{Poison Checker}
+    K -->|CLEAN| L[Correlation + Dedupe]
+    K -->|TAINTED| M[Evidence only / NO PIVOT]
+    L --> N[Trusted Typed Pivots]
+    N --> D
+    D --> O([REPORT / SSE])
+    O --> P[Local SQLite Purge]
 ```
 
-Przykładowe ścieżki:
+## 🧠 What Sherlock actually does
 
-`EMAIL → username/domain → Holehe + Maigret → profile URL → Wayback → historical URLs`
+- 🔎 przyjmuje `EMAIL | USERNAME | URL | DOMAIN | INDICATOR`;
+- 🪪 każda misja przechodzi przez **OSA Execution Force Engine** i podpisany scope;
+- 🧱 deterministic Capability Broker egzekwuje granice poza modelem;
+- 🧬 research wykonuje bounded fan-out i korelację nowych identyfikatorów;
+- ☣️ każdy remote payload jest traktowany jako **untrusted data**;
+- 🧹 `TAINTED` evidence może być widoczne w raporcie, ale **nie może rozszerzać grafu**;
+- ⏱️ hard deadline: **300 s**;
+- 🗑️ raw source evidence nie jest utrwalane w lokalnej bazie;
+- 🔐 passive targets są hashowane w evidence ledgerze;
+- 🧨 `purge_after=true` usuwa lokalny mission scope + decisions po wyniku.
 
-`DOMAIN → crt.sh → validated subdomains`
+---
 
-OSA Engine jest przypięty do SHA `f365360383511fea13cd3f7af36ecbbc720ce38d`. Repo `HazEOskA/osa-execution-force-skills` pozostaje źródłem prawdy dla routingu i kontraktów Engine; Sherlock nie tworzy drugiego routera.
+## 🕸️ Source Pack v1
 
-## Instalacja core
+| Source | Input | What it gives | Guardrail |
+| --- | --- | --- | --- |
+| 🟡 **Holehe 1.61** | `EMAIL` | registered-account signals across 100+ services | recovery email/phone hints discarded |
+| 🟣 **Maigret 0.6.4** | `USERNAME` | public-profile discovery + parsed IDs/links | typed pivots only, top-ranked sites per lookup |
+| 🕰️ **Internet Archive CDX** | `URL / DOMAIN` | historical public URLs / captures | bounded provider depth |
+| 🔐 **crt.sh Certificate Transparency** | `DOMAIN` | validated certificate names / subdomains | target-domain validation |
+
+**Truth boundary:** package/version presence can be verified locally. External providers are evaluated **per lookup**. Sherlock does not claim that every third-party site is always reachable or unchanged.
+
+---
+
+## ☣️ Poison / Prompt-Injection Boundary
+
+Remote text can contain things like:
+
+```text
+ignore previous instructions
+system prompt
+run this shell command
+you are now...
+bypass safety
+use this tool
+```
+
+Sherlock does **not** treat this as agent instruction.
+
+```text
+REMOTE PAYLOAD
+      │
+      ▼
+  SANITIZE
+      │
+      ▼
+POISON CHECKER
+   ┌──┴──┐
+ CLEAN  TAINTED
+   │       │
+   │       └── evidence visible
+   │           recursion blocked
+   │
+   └── typed candidate
+         ↓
+      validator
+         ↓
+   trusted pivot
+```
+
+### Rule
+
+> **Evidence can inform the graph. It cannot command the runtime.**
+
+---
+
+## 🧮 Hard Research Budgets
+
+| Budget | Limit |
+| --- | ---: |
+| Global deadline | `300 s` |
+| Global graph depth | `4` |
+| Identifiers | `256` |
+| Evidence records | `1000` |
+| Module invocations | `1200` |
+| Parallel module tasks | `24` |
+| No-progress stop | `2 rounds` |
+
+Provider-specific depth limits exist **on top** of the global graph budget.
+
+```text
+Maigret        <= 1
+Holehe         <= 2
+Wayback URL    <= 2
+Wayback domain <= 1
+crt.sh         <= 1
+```
+
+No infinite crawler. No uncontrolled recursive explosion.
+
+---
+
+## 🛡️ Trust Model
+
+```mermaid
+flowchart TD
+    I[Human / API Intent] --> E[OSA Execution Force Engine]
+    E --> S[Signed Mission Scope]
+    S --> B[Deterministic Capability Broker]
+    B --> R[Research Runtime]
+    R --> U[Untrusted Source Data]
+    U --> P[Poison Checker]
+    P --> C[Clean Typed Evidence]
+    C --> V[Correlation / Verification]
+    V --> X[Report]
+    X --> Q[Local Purge]
+```
+
+**One control plane. One authority. No second router hidden inside Sherlock.**
+
+OSA Engine pin:
+
+```text
+f365360383511fea13cd3f7af36ecbbc720ce38d
+```
+
+Canonical execution engine:
+
+[`HazEOskA/osa-execution-force-skills`](https://github.com/HazEOskA/osa-execution-force-skills)
+
+---
+
+## ✅ Current Truth State
+
+| Claim | State |
+| --- | --- |
+| OSA-gated mission scope | ✅ BACKED |
+| `RESEARCH_PASSIVE` target contract | ✅ BACKED |
+| Bounded recursive research kernel | ✅ BACKED |
+| Poison / injection blocker | ✅ BACKED |
+| JSON research endpoint | ✅ BACKED |
+| SSE research endpoint | ✅ BACKED |
+| Local target hashing in ledger | ✅ BACKED |
+| Ephemeral raw evidence policy | ✅ BACKED |
+| Local SQLite purge | ✅ BACKED |
+| Holehe dependency pin | ✅ VERIFIED |
+| Maigret dependency pin | ✅ VERIFIED |
+| Wayback CDX adapter | ✅ REGISTERED |
+| crt.sh CT adapter | ✅ REGISTERED |
+| Every third-party site reachable forever | ❌ NOT CLAIMED |
+| Unauthorized external deletion | ❌ NOT IMPLEMENTED |
+
+---
+
+## ⚡ Quick Start — Core
 
 ```bash
 git clone https://github.com/HazEOskA/OSINT-AGENT-SHERLOCK-OSA.git
 cd OSINT-AGENT-SHERLOCK-OSA
+
 python3 -m venv .venv
 . .venv/bin/activate
+
 python -m pip install -e .
 cp .env.example .env
+
 sherlock-osa serve --env-file .env
 ```
 
-## Instalacja research runtime
+## 🕵️ Quick Start — Research Runtime
 
 ```bash
 python -m pip install -e '.[research]'
@@ -97,23 +246,91 @@ python scripts/source_smoke.py
 sherlock-osa serve --env-file .env
 ```
 
+### Docker
+
 ```bash
 docker build -f Dockerfile.research -t sherlock-osa:research .
 docker run --env-file .env -p 8787:8787 sherlock-osa:research
 ```
 
-Domyślny `Dockerfile` pozostaje dependency-clean Apache core. `Dockerfile.research` instaluje opcjonalne Holehe/Maigret; Wayback/crt.sh adapters używają biblioteki standardowej.
+The default Docker image stays dependency-clean. `Dockerfile.research` adds the optional third-party research source pack.
 
-## API research
+---
 
-1. `POST /api/v1/missions` — podpisana misja `RESEARCH_PASSIVE`.
-2. `GET /api/v1/research/sources` — source/dependency health.
-3. `POST /api/v1/research` — bounded research JSON.
-4. `POST /api/v1/research/stream` — ten sam research przez SSE.
+## 🔌 API Surface
 
-Domyślnie `purge_after=true`.
+```text
+POST /api/v1/missions
+GET  /api/v1/research/sources
+POST /api/v1/research
+POST /api/v1/research/stream
+GET  /api/v1/evidence/verify
+```
 
-## Validation
+Research missions are bounded by the signed scope and the allowed capability set.
+
+### Example mission shape
+
+```json
+{
+  "goal": "Collect passive public evidence and correlate trusted identifiers",
+  "mode": "RESEARCH_PASSIVE",
+  "targets": [
+    {
+      "kind": "EMAIL",
+      "value": "name@example.com",
+      "ports": []
+    }
+  ],
+  "allowed_capabilities": [
+    "osint.research.run",
+    "osint.email.lookup",
+    "osint.username.lookup",
+    "osint.url.trace",
+    "osint.domain.passive",
+    "osint.correlation.expand"
+  ],
+  "ttl_minutes": 10,
+  "operator_id": "osa"
+}
+```
+
+---
+
+## 🧾 Evidence & Retention
+
+```text
+seed
+ ↓
+source result
+ ↓
+normalized evidence
+ ↓
+trust state
+ ↓
+result hash
+ ↓
+aggregate ledger metadata
+ ↓
+report returned
+ ↓
+local mission purge
+```
+
+By default:
+
+```text
+purge_after = true
+retention.mode = EPHEMERAL
+raw_module_evidence_persisted = false
+external_deletion_performed = false
+```
+
+The append-only evidence ledger keeps hashes / aggregate metadata needed for verification, not raw passive research payloads.
+
+---
+
+## 🧪 Validation
 
 ```bash
 python scripts/source_smoke.py
@@ -122,16 +339,154 @@ python scripts/smoke.py
 python scripts/smoke_demo.py
 ```
 
-CI instaluje dokładnie `holehe==1.61` i `maigret==0.6.4`, weryfikuje pełny source registry, uruchamia unit/contracts, vertical smoke i public replay smoke. CI nie wykonuje masowego researchu na zewnętrznych serwisach.
+CI verifies:
 
-## Licencje / sprzedaż
+- 📦 research dependency installation;
+- 🔒 exact Holehe / Maigret version health;
+- 🧪 source adapter tests;
+- 🧼 typed pivot validation;
+- ☣️ poison-boundary behavior;
+- ⏱️ bounded execution contracts;
+- 🔁 vertical smoke;
+- 🌐 public replay smoke.
 
-Kod Sherlock OSA core: **Apache-2.0**.
+CI deliberately does **not** perform mass external research against third-party services.
 
-Source pack nie vendoruje kodu Holehe ani Maigret. Holehe pozostaje **GPLv3**, Maigret **MIT**; dlatego domyślny core image i research image są rozdzielone. Komercyjne użycie jest możliwe, ale dystrybucja research package/image wymaga spełnienia obowiązków odpowiednich licencji. SaaS nadal wymaga sprawdzenia terms źródeł, lawful basis, privacy law i retention dla konkretnego use case.
+---
 
-Szczegóły: [`docs/RESEARCH_SOURCE_PACK_V0.3.md`](docs/RESEARCH_SOURCE_PACK_V0.3.md).
+## 📡 Public vs Private Runtime
 
-## Boundary
+```text
+PUBLIC VERCEL
+└── stateless LAB replay demo
+    └── no live research source pack
 
-Sherlock v0.3.0 nie zawiera breach dumps, infostealer logs ani funkcji nieautoryzowanego kasowania danych z cudzych systemów. `external_deletion_performed=false`. `purge_after` dotyczy lokalnego SQLite; nie jest deklaracją usunięcia danych z OSA Engine ani zewnętrznych providerów.
+PRIVATE RUNTIME
+└── OSA Engine connected
+    └── signed research missions
+        └── bounded network source workers
+            └── evidence / correlation / purge
+```
+
+A public demo is not proof that the private research worker is live. Sherlock keeps those truth states separate.
+
+---
+
+## 🐝 Old-School Architecture View
+
+```text
+                            .-"""-.
+                           /  _ _  \
+                          |  (o o)  |
+                       .--|    ^    |--.
+                      /   |  '---'  |   \
+             ________/____\_________/____\________
+            /        SHERLOCK OSA // v0.3.0        \
+           /_________________________________________\
+                    \        |        /
+                     \       |       /
+                      \      |      /
+                       \  OSA ENGINE/
+                        \    |    /
+                         \___|___/
+                             |
+                ┌────────────┴────────────┐
+                │   SIGNED MISSION SCOPE  │
+                └────────────┬────────────┘
+                             |
+                ┌────────────▼────────────┐
+                │   CAPABILITY BROKER     │
+                │     FAIL-CLOSED         │
+                └────────────┬────────────┘
+                             |
+          ┌──────────────────┼──────────────────┐
+          │                  │                  │
+      [HOLEHE]           [MAIGRET]        [WAYBACK / CT]
+          │                  │                  │
+          └──────────────────┼──────────────────┘
+                             |
+                     UNTRUSTED EVIDENCE
+                             |
+                   ┌─────────▼─────────┐
+                   │   POISON CHECKER  │
+                   └──────┬─────┬──────┘
+                          │     │
+                       CLEAN  TAINTED
+                          │     └── X NO PIVOT
+                          |
+                    CORRELATION
+                          |
+                    TRUSTED PIVOTS
+                          |
+                     REPORT / SSE
+                          |
+                     LOCAL PURGE
+
+              ===== TRUTH BEFORE CONFIDENCE =====
+```
+
+---
+
+## 💥 What Sherlock is NOT
+
+Sherlock OSA is **not**:
+
+- another unrestricted autonomous crawler;
+- a prompt that tells an LLM to "research deeply";
+- a second router competing with OSA Engine;
+- a breach-dump / stealer-log ingestion system;
+- a tool for deleting data from systems you do not control;
+- a system that converts website text directly into tool commands.
+
+The point is not maximum fan-out.
+
+The point is **maximum useful evidence inside a bounded, inspectable execution contract**.
+
+---
+
+## 📜 Licensing / Distribution
+
+Sherlock OSA core: **Apache-2.0**.
+
+Third-party source-pack dependencies keep their own licenses:
+
+- Holehe — GPLv3
+- Maigret — MIT
+
+The core image and research image are intentionally separated. If you redistribute a package/image containing third-party dependencies, satisfy the relevant license obligations and review source-site terms, privacy requirements and lawful basis for your use case.
+
+More detail:
+
+[`docs/RESEARCH_SOURCE_PACK_V0.3.md`](docs/RESEARCH_SOURCE_PACK_V0.3.md)
+
+---
+
+## 🚧 Security Boundary
+
+Sherlock v0.3.0 does not contain:
+
+```text
+breach dumps
+infostealer credential feeds
+unauthorized account takeover
+unauthorized destructive actions
+external data deletion
+```
+
+`purge_after` means **local Sherlock SQLite purge**. It is not a claim that data was erased from OSA Engine or third-party providers.
+
+---
+
+<div align="center">
+
+### 🕵️🐝 SHERLOCK OSA
+
+**Research hard. Trust slowly. Prove everything.**
+
+`SCOPE → EVIDENCE → VERIFY → CORRELATE → PURGE`
+
+**NO DRIFT. NO FAKE PROOF. NO UNBOUNDED RECURSION.**
+
+<img src="Assets/sherlock-osa.png" alt="Sherlock OSA" width="180">
+
+</div>
