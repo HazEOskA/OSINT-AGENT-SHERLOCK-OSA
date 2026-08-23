@@ -1,65 +1,83 @@
 # Sherlock OSA
 
-**Kontrolowane, evidence-first laboratorium bezpieczeństwa sterowane agentami.**
+**Evidence-first, bounded OSINT research runtime sterowany przez OSA Execution Force Engine.**
 
-Sherlock OSA nie ufa modelowi językowemu jako granicy bezpieczeństwa. OSA
-Execution Force Engine rozpoznaje intencję, wybiera kontrakt i prowadzi misję,
-a deterministyczny broker poza modelem egzekwuje scope, target, port, trasę,
-wygaśnięcie i stan evidence.
+Sherlock OSA nie ufa modelowi językowemu jako granicy bezpieczeństwa. OSA Execution Force Engine prowadzi misję, deterministyczny broker egzekwuje podpisany scope, a research działa jako bounded fan-out → evidence → correlation → trusted pivots z twardym limitem 300 s.
 
-> Status `v0.1.1`: działający control-plane vertical slice oraz publiczny,
-> stateless replay demo. Realne skanery,
-> exploity, Tor, microVM, gVisor i sensory blue-team są celowo `UNBACKED`.
-> Endpoint wykonawczy symuluje operację bez ruchu sieciowego i zapisuje ten fakt
-> w ledgerze. Brak backingu nigdy nie jest raportowany jako wykonanie.
+## Status v0.3.0
 
-## Co działa teraz
+### BACKED
 
-- polski panel operatora i API bez zewnętrznych zależności runtime;
-- obowiązkowy adapter do OSA Execution Force Engine;
-- kontrakt misji `RESEARCH_PASSIVE | LAB_RANGE | AUTHORIZED_EXTERNAL`;
-- HMAC podpisujący pełny scope oraz hash receiptu Engine;
-- deny-by-default Capability Broker;
-- `LAB_RANGE` używa nieadresowalnych identyfikatorów `lab://...`, a nie IP LAN;
-- `AUTHORIZED_EXTERNAL` jest fail-closed do czasu niezależnej weryfikacji własności;
-- append-only JSONL evidence ledger z łańcuchem SHA-256;
-- deterministyczny replay wszystkich decyzji;
-- SQLite persistence;
-- 20-repo benchmark z przeglądem licencji;
-- test E2E: `mission -> Engine receipt -> signed scope -> decision -> simulated
-  worker -> evidence -> replay`.
-- Vercel-safe replay: bundled receipt vector → prawdziwy broker → prawdziwa
-  symulacja → pięcioelementowy hash-chain, zawsze z `live_engine_called=false`.
+- jeden control plane przez OSA Execution Force Engine;
+- `RESEARCH_PASSIVE` dla `EMAIL | USERNAME | URL | DOMAIN | INDICATOR`;
+- recursive research kernel: dedupe, max depth, identifiers, evidence, invocations i 300 s hard deadline;
+- poison/injection checker: `TAINTED` evidence nie może tworzyć kolejnych pivotów;
+- SSE/JSON research endpoints;
+- target passive hashowany w evidence ledgerze;
+- raw source evidence pozostaje ephemeral;
+- `purge_after=true` usuwa lokalny scope i decisions z SQLite;
+- publiczny Vercel deploy pozostaje stateless LAB replay demo.
 
-## Architecture Lock
+### SOURCE PACK v1
 
-```mermaid
-flowchart TB
-    UI["Panel / API"] --> ENG["OSA Execution Force Engine"]
-    ENG --> SCOPE["Signed Mission Scope"]
-    SCOPE --> BROKER["Deterministic Capability Broker"]
-    BROKER --> SIM["Simulation Adapter v0.1"]
-    BROKER -. "future, currently UNBACKED" .-> RANGE["Isolated Range Worker"]
-    SIM --> LEDGER["Hash-chain Evidence"]
-    RANGE -.-> BLUE["Blue-team Telemetry"]
-    BLUE -.-> LEDGER
+Network resolvers działają w killowalnych subprocessach. Target przechodzi przez `stdin`, nie argv.
+
+- **Holehe 1.61** — `EMAIL` → account-registration signals na 100+ usługach; recovery email/phone hints są celowo odrzucane;
+- **Maigret 0.6.4** — `USERNAME` → profile discovery na top 500 publicznych serwisów per lookup, parsing profilu oraz kontrolowane `URL/EMAIL/USERNAME` pivots;
+- **Internet Archive CDX** — `URL | DOMAIN` → historyczne publiczne captures/URL-e;
+- **crt.sh Certificate Transparency** — `DOMAIN` → zwalidowane publiczne nazwy certyfikatów/subdomeny.
+
+Provider-specific depth bounds zatrzymują powtórne masowe odpytywanie: Maigret `<=1`, Holehe `<=2`, Wayback URL `<=2`, Wayback domain `<=1`, crt.sh `<=1`.
+
+**Truth boundary:** lokalna rejestracja source packa i wersje Holehe/Maigret są mechanicznie sprawdzane. Globalna dostępność Internetu ani konkretnej usługi nie jest deklarowana jako BACKED — jest oceniana per lookup.
+
+## Architecture
+
+```text
+EMAIL / USERNAME / URL / DOMAIN / INDICATOR
+                    │
+                    ▼
+             OSA Engine Scope
+                    │
+             Capability Broker
+                    │
+                    ▼
+          Bounded Research Engine
+        ┌───────────┼──────────────┬───────────┐
+        ▼           ▼              ▼           ▼
+ seed-expansion   Holehe         Maigret    Wayback / CT
+    local        subprocess      subprocess    subprocess
+        └───────────┴──────────────┴───────────┘
+                    ▼
+             normalized evidence
+                    │
+               PoisonChecker
+              ┌─────┴─────┐
+            CLEAN       TAINTED
+              │           └── no pivots
+              ▼
+          correlation/dedupe
+              │
+        trusted identifiers
+              │
+              └── bounded recursion
+                    │
+                    ▼
+                report/SSE
+                    │
+                    ▼
+             local DB purge
 ```
 
-Pełny lock prywatnego runtime:
-[`docs/ARCHITECTURE_LOCK_V0.1.md`](docs/ARCHITECTURE_LOCK_V0.1.md).
-Kontrakt publicznego deployu:
-[`docs/ARCHITECTURE_LOCK_V0.1.1.md`](docs/ARCHITECTURE_LOCK_V0.1.1.md).
+Przykładowe ścieżki:
 
-## Wymagania
+`EMAIL → username/domain → Holehe + Maigret → profile URL → Wayback → historical URLs`
 
-- Python 3.12+
-- działający [OSA Execution Force Engine](https://github.com/HazEOskA/osa-execution-force-skills)
-  przypięty do SHA `f365360383511fea13cd3f7af36ecbbc720ce38d`
+`DOMAIN → crt.sh → validated subdomains`
 
-Repo Engine jest źródłem prawdy dla routingu, kontraktów skillsów i evidence
-authority. Sherlock OSA nie duplikuje jego routera.
+OSA Engine jest przypięty do SHA `f365360383511fea13cd3f7af36ecbbc720ce38d`. Repo `HazEOskA/osa-execution-force-skills` pozostaje źródłem prawdy dla routingu i kontraktów Engine; Sherlock nie tworzy drugiego routera.
 
-## Uruchomienie
+## Instalacja core
 
 ```bash
 git clone https://github.com/HazEOskA/OSINT-AGENT-SHERLOCK-OSA.git
@@ -68,74 +86,52 @@ python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -e .
 cp .env.example .env
-```
-
-Ustaw trzy sekrety w `.env`, uruchom Engine na porcie `8643`, a następnie:
-
-```bash
 sherlock-osa serve --env-file .env
 ```
 
-Panel: `http://127.0.0.1:8787`
-
-## Publiczny replay na Vercel
+## Instalacja research runtime
 
 ```bash
-vercel deploy
+python -m pip install -e '.[research]'
+python scripts/source_smoke.py
+sherlock-osa serve --env-file .env
 ```
-
-Vercel uruchamia `api/index.py` jako Python Function. Nie wymaga sekretów,
-ponieważ publiczna wersja nie tworzy nowych misji i nie wywołuje live Engine.
-Endpoint `POST /api/v1/demo/replay` akceptuje tylko jeden target `lab://...` w
-trybie `LAB_RANGE`, po czym wykonuje cały bezefektowy replay w jednym requestcie.
-
-Publiczny hash-chain jest `PER_REQUEST`; trwały ledger i prawdziwe misje istnieją
-wyłącznie w prywatnym runtime. To jest celowy podział bezpieczeństwa, nie fallback
-Engine.
-
-## Walidacja
 
 ```bash
-python3 scripts/verify.py
-python3 scripts/smoke.py
-python3 scripts/smoke_demo.py
+docker build -f Dockerfile.research -t sherlock-osa:research .
+docker run --env-file .env -p 8787:8787 sherlock-osa:research
 ```
 
-Smoke używa kontrolowanego fake Engine wyłącznie jako test double. Produkcyjny
-startup nie posiada fallbacku omijającego OSA Engine.
+Domyślny `Dockerfile` pozostaje dependency-clean Apache core. `Dockerfile.research` instaluje opcjonalne Holehe/Maigret; Wayback/crt.sh adapters używają biblioteki standardowej.
 
-## Bezpieczny przykład misji
+## API research
 
-```json
-{
-  "goal": "Sprawdź przepływ policy i evidence dla Juice Shop w labie",
-  "mode": "LAB_RANGE",
-  "targets": [{"kind": "LAB_ASSET", "value": "lab://juice-shop", "ports": [3000]}],
-  "allowed_capabilities": ["lab.http.probe"],
-  "ttl_minutes": 30,
-  "operator_id": "osa"
-}
+1. `POST /api/v1/missions` — podpisana misja `RESEARCH_PASSIVE`.
+2. `GET /api/v1/research/sources` — source/dependency health.
+3. `POST /api/v1/research` — bounded research JSON.
+4. `POST /api/v1/research/stream` — ten sam research przez SSE.
+
+Domyślnie `purge_after=true`.
+
+## Validation
+
+```bash
+python scripts/source_smoke.py
+python scripts/verify.py
+python scripts/smoke.py
+python scripts/smoke_demo.py
 ```
 
-To nie uruchamia skanera. Po receiptcie Engine broker może zatwierdzić wyłącznie
-symulację dokładnie tej capability i tego targetu.
+CI instaluje dokładnie `holehe==1.61` i `maigret==0.6.4`, weryfikuje pełny source registry, uruchamia unit/contracts, vertical smoke i public replay smoke. CI nie wykonuje masowego researchu na zewnętrznych serwisach.
 
-## Benchmark
+## Licencje / sprzedaż
 
-Wybraliśmy 20 aktywnych projektów jako punkty odniesienia, m.in.
-[PentAGI](https://github.com/vxcontrol/pentagi),
-[PentestGPT](https://github.com/GreyDGL/PentestGPT),
-[Apache Caldera](https://github.com/apache/caldera),
-[SpiderFoot](https://github.com/smicallef/spiderfoot),
-[MISP](https://github.com/MISP/MISP),
-[Firecracker](https://github.com/firecracker-microvm/firecracker) i
-[gVisor](https://github.com/google/gvisor).
+Kod Sherlock OSA core: **Apache-2.0**.
 
-Nie kopiujemy ich kodu do jednego monolitu. Benchmark określa wzorce, kontrakty
-adapterów i ograniczenia licencyjne. Pełna tabela:
-[`docs/REFERENCE_BENCHMARK_2026-08-15.md`](docs/REFERENCE_BENCHMARK_2026-08-15.md).
+Source pack nie vendoruje kodu Holehe ani Maigret. Holehe pozostaje **GPLv3**, Maigret **MIT**; dlatego domyślny core image i research image są rozdzielone. Komercyjne użycie jest możliwe, ale dystrybucja research package/image wymaga spełnienia obowiązków odpowiednich licencji. SaaS nadal wymaga sprawdzenia terms źródeł, lawful basis, privacy law i retention dla konkretnego use case.
 
-## Licencja
+Szczegóły: [`docs/RESEARCH_SOURCE_PACK_V0.3.md`](docs/RESEARCH_SOURCE_PACK_V0.3.md).
 
-Kod Sherlock OSA: Apache-2.0. Zewnętrzne projekty zachowują własne licencje i
-znaki towarowe. `v0.1.1` nie vendoruje kodu trzecich stron.
+## Boundary
+
+Sherlock v0.3.0 nie zawiera breach dumps, infostealer logs ani funkcji nieautoryzowanego kasowania danych z cudzych systemów. `external_deletion_performed=false`. `purge_after` dotyczy lokalnego SQLite; nie jest deklaracją usunięcia danych z OSA Engine ani zewnętrznych providerów.

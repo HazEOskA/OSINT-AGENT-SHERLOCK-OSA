@@ -69,7 +69,20 @@ ADAPTERS = (
         BackingStatus.BACKED_LOCAL,
         False,
         False,
-        "Backed local orchestrator: bounded recursion, normalization, dedupe, poison guard and ephemeral results. External source connectors are separate.",
+        "Backed local orchestrator: bounded recursion, normalization, dedupe, poison guard and ephemeral results.",
+    ),
+    AdapterDescriptor(
+        "research.public-source-pack",
+        (
+            "osint.email.lookup",
+            "osint.username.lookup",
+            "osint.url.trace",
+            "osint.domain.passive",
+        ),
+        BackingStatus.UNBACKED,
+        True,
+        False,
+        "Implemented isolated source workers: Holehe 1.61, Maigret 0.6.4, Internet Archive CDX and crt.sh Certificate Transparency. Dependency/contract health is mechanically checked; live Internet reachability is evaluated per lookup and is not globally claimed.",
     ),
     AdapterDescriptor(
         "research.tor-worker",
@@ -83,7 +96,7 @@ ADAPTERS = (
         BackingStatus.UNBACKED,
         True,
         False,
-        "Planned: enforced gateway and passive-only source policy. Not claimed as live.",
+        "Future enforced gateway/Tor route. Not required by public source-pack v1 and not claimed as live.",
     ),
     AdapterDescriptor(
         "range.microvm-worker",
