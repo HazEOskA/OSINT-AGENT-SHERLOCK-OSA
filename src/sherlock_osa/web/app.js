@@ -8,6 +8,16 @@ const state = {
   lastBundle: null,
 };
 
+const researchCapabilities = [
+  "osint.research.run",
+  "osint.correlation.expand",
+  "osint.email.lookup",
+  "osint.username.lookup",
+  "osint.url.trace",
+  "osint.domain.passive",
+  "intel.indicator.enrich",
+];
+
 function toast(message, error = false) {
   const element = $("#toast");
   element.textContent = message;
@@ -16,10 +26,22 @@ function toast(message, error = false) {
   window.setTimeout(() => { element.hidden = true; }, 5000);
 }
 
+function syncTokenInputs(value) {
+  for (const selector of ["#search-api-key", "#api-key"]) {
+    const element = $(selector);
+    if (element && value && element.value !== value) element.value = value;
+  }
+}
+
 function token() {
-  const value = $("#api-key").value.trim();
-  if (value) sessionStorage.setItem("sherlock_api_key", value);
-  return value || sessionStorage.getItem("sherlock_api_key") || "";
+  const searchValue = $("#search-api-key")?.value.trim() || "";
+  const sandboxValue = $("#api-key")?.value.trim() || "";
+  const value = searchValue || sandboxValue || sessionStorage.getItem("sherlock_api_key") || "";
+  if (value) {
+    sessionStorage.setItem("sherlock_api_key", value);
+    syncTokenInputs(value);
+  }
+  return value;
 }
 
 async function api(path, options = {}, auth = true) {
@@ -36,19 +58,95 @@ async function api(path, options = {}, auth = true) {
   return body;
 }
 
-function field(form, name) { return form.elements.namedItem(name).value.trim(); }
+function field(form, name) {
+  const control = form.elements.namedItem(name);
+  return control ? control.value.trim() : "";
+}
 
 function missionPayload(form) {
   const mode = field(form, "mode");
   const portRaw = field(form, "port");
   const ports = portRaw && mode !== "RESEARCH_PASSIVE" ? [Number(portRaw)] : [];
+  const capabilities = mode === "RESEARCH_PASSIVE"
+    ? researchCapabilities
+    : [field(form, "capability")];
   return {
     goal: field(form, "goal"),
     mode,
     targets: [{ kind: field(form, "target_kind"), value: field(form, "target_value"), ports }],
-    allowed_capabilities: [field(form, "capability")],
+    allowed_capabilities: capabilities,
     ttl_minutes: Number(field(form, "ttl_minutes")),
     operator_id: field(form, "operator_id"),
+  };
+}
+
+function normalizePersonName(value) {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s'-]/g, " ")
+    .replace(/[\s'-]+/g, " ")
+    .trim();
+}
+
+function personUsernameTargets(value) {
+  const normalized = normalizePersonName(value);
+  const parts = normalized.split(" ").filter(Boolean);
+  if (parts.length < 2) {
+    const error = new Error("Dla trybu IMIĘ + NAZWISKO podaj co najmniej dwa człony.");
+    error.code = "PERSON_NAME_REQUIRED";
+    throw error;
+  }
+
+  const first = parts[0];
+  const last = parts[parts.length - 1];
+  const middle = parts.slice(1, -1).join("");
+  const candidates = new Set([
+    `${first}${last}`,
+    `${first}.${last}`,
+    `${first}_${last}`,
+    `${first[0]}${last}`,
+    `${last}${first}`,
+    `${last}.${first}`,
+    `${last}_${first}`,
+  ]);
+  if (middle) {
+    candidates.add(`${first}${middle}${last}`);
+    candidates.add(`${first}.${middle}.${last}`);
+  }
+
+  return [...candidates]
+    .filter((candidate) => /^[a-z0-9][a-z0-9_.-]{0,63}$/.test(candidate))
+    .slice(0, 9)
+    .map((candidate) => ({ kind: "USERNAME", value: candidate, ports: [] }));
+}
+
+function searchPayload(form) {
+  const kind = field(form, "search_kind");
+  const query = field(form, "query");
+  if (!query) {
+    const error = new Error("Wpisz wartość do wyszukania.");
+    error.code = "SEARCH_QUERY_REQUIRED";
+    throw error;
+  }
+
+  let targets;
+  if (kind === "PERSON") {
+    targets = personUsernameTargets(query);
+  } else {
+    targets = [{ kind, value: query, ports: [] }];
+  }
+
+  return {
+    goal: kind === "PERSON"
+      ? "OSINT person lookup: derive bounded username candidates and correlate public evidence"
+      : `OSINT ${kind.toLowerCase()} lookup: correlate public evidence`,
+    mode: "RESEARCH_PASSIVE",
+    targets,
+    allowed_capabilities: researchCapabilities,
+    ttl_minutes: 10,
+    operator_id: "osa-search-ui",
   };
 }
 
@@ -60,8 +158,41 @@ function routeFor(mode) {
   }[mode];
 }
 
-function renderResult(bundle) {
-  const panel = $("#result");
+function renderFacts(panelSelector, gridSelector, jsonSelector, bundle, facts) {
+  const panel = $(panelSelector);
+  const grid = $(gridSelector);
+  grid.replaceChildren(...facts.map(([label, value]) => {
+    const article = document.createElement("article");
+    const span = document.createElement("span");
+    const strong = document.createElement("strong");
+    span.textContent = label;
+    strong.textContent = value;
+    article.append(span, strong);
+    return article;
+  }));
+  $(jsonSelector).textContent = JSON.stringify(bundle, null, 2);
+  panel.hidden = false;
+  panel.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function renderResearchResult(bundle, search = false) {
+  const research = bundle.research || {};
+  const facts = [
+    ["STATUS", research.status || "UNKNOWN"],
+    ["IDENTIFIERS", String(research.identifiers_seen ?? "UNKNOWN")],
+    ["EVIDENCE", String(research.evidence?.length ?? "UNKNOWN")],
+    ["TAINTED", String(research.tainted_evidence ?? "UNKNOWN")],
+    ["STOP", research.stop_reason || "UNKNOWN"],
+    ["PURGE", bundle.purge?.performed === true ? "DONE" : "OFF"],
+  ];
+  if (search) {
+    renderFacts("#search-result", "#search-result-grid", "#search-result-json", bundle, facts);
+  } else {
+    renderFacts("#result", "#result-grid", "#result-json", bundle, facts);
+  }
+}
+
+function renderExecutionResult(bundle) {
   const mission = bundle.mission?.mission || {};
   const decision = bundle.decision?.decision || {};
   const receipt = bundle.execution?.receipt || {};
@@ -73,19 +204,49 @@ function renderResult(bundle) {
     ["NETWORK EFFECT", String(receipt.network_effect_performed ?? "UNKNOWN").toUpperCase()],
     ["REPLAY", replay.valid === true ? "VALID" : "UNKNOWN"],
   ];
-  const grid = $("#result-grid");
-  grid.replaceChildren(...facts.map(([label, value]) => {
-    const article = document.createElement("article");
-    const span = document.createElement("span");
-    const strong = document.createElement("strong");
-    span.textContent = label;
-    strong.textContent = value;
-    article.append(span, strong);
-    return article;
-  }));
-  $("#result-json").textContent = JSON.stringify(bundle, null, 2);
-  panel.hidden = false;
-  panel.scrollIntoView({ behavior: "smooth", block: "start" });
+  renderFacts("#result", "#result-grid", "#result-json", bundle, facts);
+}
+
+async function createResearch(payload, purgeAfter = true) {
+  const missionResponse = await api("/api/v1/missions", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  const mission = missionResponse.mission;
+  state.lastMission = mission;
+  const researchResponse = await api("/api/v1/research", {
+    method: "POST",
+    body: JSON.stringify({
+      mission_id: mission.mission_id,
+      purge_after: purgeAfter,
+    }),
+  });
+  return { mission: missionResponse, ...researchResponse };
+}
+
+async function runSearch(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = $("#search-submit");
+  button.disabled = true;
+  button.textContent = "SEARCH → FAN-OUT → CORRELATE…";
+  try {
+    if (state.deploymentMode === "PUBLIC_REPLAY_DEMO") {
+      const error = new Error("Ten publiczny deploy jest replay-only. Live search wymaga prywatnego runtime połączonego z OSA Engine.");
+      error.code = "LIVE_RESEARCH_UNAVAILABLE";
+      throw error;
+    }
+    const payload = searchPayload(form);
+    const bundle = await createResearch(payload, true);
+    state.lastBundle = bundle;
+    renderResearchResult(bundle, true);
+    toast(`Search zakończony // evidence ${bundle.research?.evidence?.length ?? 0} // identifiers ${bundle.research?.identifiers_seen ?? 0}.`);
+  } catch (error) {
+    toast(`${error.code || "ERROR"}: ${error.message}`, true);
+  } finally {
+    button.disabled = state.deploymentMode === "PUBLIC_REPLAY_DEMO";
+    button.textContent = "SZUKAJ → CORRELATE → EVIDENCE";
+  }
 }
 
 async function runFlow(event) {
@@ -93,11 +254,15 @@ async function runFlow(event) {
   const form = event.currentTarget;
   const button = form.querySelector("button[type=submit]");
   button.disabled = true;
-  button.textContent = state.deploymentMode === "PUBLIC_REPLAY_DEMO"
-    ? "WERYFIKACJA PUBLICZNEGO REPLAYU…"
-    : "WYKONYWANIE KONTROLOWANEGO FLOW…";
+  let payload;
   try {
-    const payload = missionPayload(form);
+    payload = missionPayload(form);
+    button.textContent = state.deploymentMode === "PUBLIC_REPLAY_DEMO"
+      ? "WERYFIKACJA PUBLICZNEGO REPLAYU…"
+      : payload.mode === "RESEARCH_PASSIVE"
+        ? "RESEARCH: FAN-OUT → CORRELATE → VERIFY…"
+        : "WYKONYWANIE KONTROLOWANEGO FLOW…";
+
     if (state.deploymentMode === "PUBLIC_REPLAY_DEMO") {
       const bundle = await api(
         "/api/v1/demo/replay",
@@ -105,10 +270,20 @@ async function runFlow(event) {
         false,
       );
       state.lastBundle = bundle;
-      renderResult(bundle);
+      renderExecutionResult(bundle);
       toast("Replay VALID. Live Engine i efekty sieciowe nie zostały uruchomione.");
       return;
     }
+
+    if (payload.mode === "RESEARCH_PASSIVE") {
+      const purgeControl = form.elements.namedItem("purge_after");
+      const bundle = await createResearch(payload, Boolean(purgeControl?.checked));
+      state.lastBundle = bundle;
+      renderResearchResult(bundle, false);
+      toast(`Research zakończony // evidence ${bundle.research?.evidence?.length ?? 0} // tainted ${bundle.research?.tainted_evidence ?? 0}.`);
+      return;
+    }
+
     const missionResponse = await api("/api/v1/missions", { method: "POST", body: JSON.stringify(payload) });
     const mission = missionResponse.mission;
     state.lastMission = mission;
@@ -136,16 +311,48 @@ async function runFlow(event) {
     });
     const bundle = { mission: missionResponse, decision: decisionResponse, execution: executionResponse, replay: replayResponse };
     state.lastBundle = bundle;
-    renderResult(bundle);
+    renderExecutionResult(bundle);
     toast("Flow zakończony. Sprawdź receipt i replay.");
   } catch (error) {
     toast(`${error.code || "ERROR"}: ${error.message}`, true);
   } finally {
     button.disabled = false;
-    button.textContent = state.deploymentMode === "PUBLIC_REPLAY_DEMO"
-      ? "REPLAY VECTOR → BROKER → EVIDENCE"
-      : "ENGINE → SIGN → DECIDE → SIMULATE";
+    updateFormMode();
   }
+}
+
+function updateSearchMode() {
+  const form = $("#search-form");
+  const kind = field(form, "search_kind");
+  const input = $("#search-query");
+  const note = $("#search-note");
+  const config = {
+    EMAIL: ["name@example.com", "Email jest seedem EMAIL i może pivotować do username/domain."],
+    USERNAME: ["username", "Nick jest seedem USERNAME i odpala bounded profile discovery."],
+    PERSON: ["Jan Kowalski", "Imię + nazwisko tworzy deterministyczne kandydaty username; nie jest udawane jako natywny provider full-name search."],
+  }[kind];
+  input.placeholder = config[0];
+  note.textContent = config[1];
+}
+
+function updateFormMode() {
+  const form = $("#mission-form");
+  const mode = field(form, "mode");
+  const button = $("#submit-flow");
+  if (state.deploymentMode === "PUBLIC_REPLAY_DEMO") return;
+  const research = mode === "RESEARCH_PASSIVE";
+  const capability = form.elements.namedItem("capability");
+  const port = form.elements.namedItem("port");
+  const purge = form.elements.namedItem("purge_after");
+  capability.disabled = research;
+  port.disabled = research;
+  if (purge) purge.disabled = !research;
+  button.textContent = research
+    ? "ENGINE → RESEARCH → CORRELATE → PURGE"
+    : "ENGINE → SIGN → DECIDE → SIMULATE";
+  $("#form-note").textContent = research
+    ? "Publiczne/pasywne źródła only. 300 s hard stop, poison gate i local purge."
+    : "LAB worker pozostaje kontrolowany przez podpisany scope i deterministic broker.";
 }
 
 function configurePublicReplay() {
@@ -153,6 +360,13 @@ function configurePublicReplay() {
   const apiKey = $("#api-key");
   apiKeyField.hidden = true;
   apiKey.required = false;
+
+  const searchKeyField = $("#search-api-key-field");
+  const searchKey = $("#search-api-key");
+  searchKeyField.hidden = true;
+  searchKey.required = false;
+  for (const control of $("#search-form").elements) control.disabled = true;
+  $("#search-note").textContent = "PUBLIC REPLAY jest read-only. Live OSINT search wymaga prywatnego runtime połączonego z OSA Engine.";
 
   const form = $("#mission-form");
   const mode = form.elements.namedItem("mode");
@@ -172,9 +386,11 @@ function configurePublicReplay() {
     "blue.telemetry.replay",
   ]);
   const capabilitySelect = form.elements.namedItem("capability");
-  for (const option of capabilitySelect.options) {
-    option.disabled = !demoCapabilities.has(option.value);
-  }
+  capabilitySelect.disabled = false;
+  for (const option of capabilitySelect.options) option.disabled = !demoCapabilities.has(option.value);
+  capabilitySelect.value = "lab.http.probe";
+  const purge = form.elements.namedItem("purge_after");
+  if (purge) purge.disabled = true;
 
   const replaySteps = [
     "Load bundled OSA receipt vector",
@@ -189,11 +405,9 @@ function configurePublicReplay() {
 
   $("#deployment-mode").classList.add("online");
   $("#deployment-mode").innerHTML = "<i></i> PUBLIC REPLAY";
-  $("#mission-intro").textContent =
-    "Publiczny deploy odtwarza jawnie oznaczony wektor receiptu OSA przez prawdziwy podpis, broker, worker symulacyjny i hash-chain. Nie wywołuje live Engine, sieci ani shella.";
+  $("#mission-intro").textContent = "Publiczny deploy odtwarza jawnie oznaczony replay. Search-first UI pozostaje widoczny jako kontrakt produktu, ale live research jest fail-closed bez prywatnego runtime.";
   $("#submit-flow").textContent = "REPLAY VECTOR → BROKER → EVIDENCE";
-  $("#form-note").textContent =
-    "Tryb publiczny jest stateless i LAB-only. Nowe misje wykonawcze wymagają prywatnego runtime połączonego z OSA Engine.";
+  $("#form-note").textContent = "Tryb publiczny jest stateless i LAB-only. Nowe misje wymagają prywatnego runtime.";
 }
 
 async function loadStatus() {
@@ -206,6 +420,7 @@ async function loadStatus() {
       ? "<i></i> DEMO ONLINE"
       : "<i></i> API ONLINE";
     if (state.deploymentMode === "PUBLIC_REPLAY_DEMO") configurePublicReplay();
+    else updateFormMode();
     if (health.status !== "OK") status.textContent = `API ${health.status}`;
   } catch {
     $("#service-status").textContent = "API OFFLINE";
@@ -238,7 +453,7 @@ async function loadReferences() {
       return card;
     });
     $("#repo-grid").replaceChildren(...cards);
-  } catch (error) {
+  } catch {
     $("#repo-count").textContent = "BENCHMARK UNAVAILABLE";
   }
 }
@@ -267,8 +482,12 @@ async function verifyLedger() {
 }
 
 const savedToken = sessionStorage.getItem("sherlock_api_key");
-if (savedToken) $("#api-key").value = savedToken;
+if (savedToken) syncTokenInputs(savedToken);
+$("#search-form").addEventListener("submit", runSearch);
+$("#search-kind").addEventListener("change", updateSearchMode);
 $("#mission-form").addEventListener("submit", runFlow);
-$("#verify-ledger").addEventListener("click", verifyLedger);
+$("#mission-form").elements.namedItem("mode").addEventListener("change", updateFormMode);
+$("#verify-ledger")?.addEventListener("click", verifyLedger);
+updateSearchMode();
 loadStatus();
 loadReferences();
