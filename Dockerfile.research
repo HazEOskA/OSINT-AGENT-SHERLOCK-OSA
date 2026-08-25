@@ -1,9 +1,14 @@
 FROM python:3.12-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    SHERLOCK_DATABASE_PATH=/var/lib/sherlock/sherlock-osa.db \
+    SHERLOCK_EVIDENCE_PATH=/var/lib/sherlock/evidence.jsonl
 
-RUN groupadd --system sherlock && useradd --system --gid sherlock --create-home sherlock
+RUN groupadd --system sherlock \
+    && useradd --system --gid sherlock --create-home sherlock \
+    && mkdir -p /var/lib/sherlock \
+    && chown -R sherlock:sherlock /var/lib/sherlock
 
 WORKDIR /app
 COPY pyproject.toml README.md LICENSE NOTICE ./
