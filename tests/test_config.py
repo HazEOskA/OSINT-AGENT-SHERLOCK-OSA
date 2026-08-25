@@ -29,7 +29,7 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(settings.host, "0.0.0.0")
         self.assertEqual(settings.port, 8080)
 
-    def test_explicit_sherlock_network_settings_override_runtime_defaults(self) -> None:
+    def test_managed_runtime_port_cannot_be_overridden_by_local_settings(self) -> None:
         env = {
             **BASE_ENV,
             "PORT": "8080",
@@ -39,7 +39,19 @@ class ConfigTests(unittest.TestCase):
         with patch.dict(os.environ, env, clear=True):
             settings = Settings.from_env()
 
-        self.assertEqual(settings.host, "127.0.0.1")
+        self.assertEqual(settings.host, "0.0.0.0")
+        self.assertEqual(settings.port, 8080)
+
+    def test_explicit_local_network_settings_work_without_managed_port(self) -> None:
+        env = {
+            **BASE_ENV,
+            "SHERLOCK_HOST": "0.0.0.0",
+            "SHERLOCK_PORT": "9000",
+        }
+        with patch.dict(os.environ, env, clear=True):
+            settings = Settings.from_env()
+
+        self.assertEqual(settings.host, "0.0.0.0")
         self.assertEqual(settings.port, 9000)
 
 
