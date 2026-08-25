@@ -11,7 +11,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -28,3 +28,42 @@ jobs:
         run: python scripts/smoke.py
       - name: Smoke public replay
         run: python scripts/smoke_demo.py
+      - name: Build live research container
+        run: docker build -f Dockerfile.research -t sherlock-osa:ci .
+      - name: Smoke managed-runtime container contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          trap 'docker rm -f sherlock-osa-ci >/dev/null 2>&1 || true' EXIT
+
+          docker run -d --name sherlock-osa-ci \
+            -p 127.0.0.1:18080:8080 \
+            -e PORT=8080 \
+            -e SHERLOCK_HOST=127.0.0.1 \
+            -e SHERLOCK_PORT=8787 \
+            -e SHERLOCK_API_KEY=ci-sherlock-api-key-1234567890 \
+            -e SHERLOCK_MISSION_SIGNING_SECRET=ci-mission-signing-secret-12345678901234567890 \
+            -e OSA_ACTIONS_API_KEY=ci-osa-actions-key-123456 \
+            sherlock-osa:ci
+
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:18080/api/v1/health >/tmp/sherlock-health.json; then
+              break
+            fi
+            if ! docker inspect -f '{{.State.Running}}' sherlock-osa-ci | grep -q true; then
+              docker logs sherlock-osa-ci
+              exit 1
+            fi
+            sleep 1
+          done
+
+          curl --fail --silent --show-error http://127.0.0.1:18080/api/v1/health | tee /tmp/sherlock-health.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          health = json.loads(Path('/tmp/sherlock-health.json').read_text())
+          assert health['status'] == 'OK', health
+          assert health.get('deployment_mode') != 'PUBLIC_REPLAY_DEMO', health
+          PY
+          docker exec sherlock-osa-ci test -w /var/lib/sherlock
