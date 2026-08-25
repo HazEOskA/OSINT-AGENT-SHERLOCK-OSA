@@ -47,10 +47,16 @@ def _integer(name: str, default: int, minimum: int, maximum: int) -> int:
     return value
 
 
-def _runtime_port_default() -> int:
+def _managed_runtime_port() -> int | None:
+    """Return the platform-owned PORT when present.
+
+    Managed runtimes such as Cloud Run inject PORT and require the process to
+    listen on 0.0.0.0 at exactly that port. Local SHERLOCK_HOST/PORT settings
+    must never override that contract.
+    """
     raw = os.getenv("PORT", "").strip()
     if not raw:
-        return 8787
+        return None
     try:
         value = int(raw)
     except ValueError as exc:
@@ -83,8 +89,15 @@ class Settings:
         engine_url = os.getenv("OSA_ENGINE_URL", "http://127.0.0.1:8643").strip().rstrip("/")
         if not engine_url.startswith(("http://", "https://")):
             raise ConfigurationError("INVALID_ENGINE_URL", "OSA_ENGINE_URL musi używać http:// lub https://.")
-        runtime_port = _runtime_port_default()
-        runtime_host = "0.0.0.0" if os.getenv("PORT", "").strip() else "127.0.0.1"
+
+        managed_port = _managed_runtime_port()
+        if managed_port is not None:
+            runtime_host = "0.0.0.0"
+            runtime_port = managed_port
+        else:
+            runtime_host = os.getenv("SHERLOCK_HOST", "127.0.0.1").strip() or "127.0.0.1"
+            runtime_port = _integer("SHERLOCK_PORT", 8787, 1, 65535)
+
         return cls(
             api_key=_required("SHERLOCK_API_KEY", 24),
             mission_signing_secret=_required("SHERLOCK_MISSION_SIGNING_SECRET", 32),
@@ -93,7 +106,7 @@ class Settings:
             engine_commit_sha=engine_sha,
             database_path=Path(os.getenv("SHERLOCK_DATABASE_PATH", "./data/sherlock-osa.db")),
             evidence_path=Path(os.getenv("SHERLOCK_EVIDENCE_PATH", "./data/evidence.jsonl")),
-            host=os.getenv("SHERLOCK_HOST", runtime_host).strip(),
-            port=_integer("SHERLOCK_PORT", runtime_port, 1, 65535),
+            host=runtime_host,
+            port=runtime_port,
             engine_timeout_seconds=_integer("SHERLOCK_ENGINE_TIMEOUT_SECONDS", 15, 1, 120),
         )
