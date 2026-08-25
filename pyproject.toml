@@ -5,23 +5,20 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "sherlock-osa"
 version = "0.3.0"
-description = "Controlled, evidence-first agent security laboratory powered by OSA Execution Force Engine."
+description = "Standalone, bounded, evidence-first OSINT research runtime."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "Apache-2.0"
 authors = [
   { name = "Bartosz Osinski (Osa)" },
 ]
-keywords = ["osint", "cyber-range", "security", "agents", "evidence", "sandbox"]
+keywords = ["osint", "research", "security", "evidence", "correlation"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Programming Language :: Python :: 3.12",
   "Topic :: Security",
 ]
-dependencies = []
-
-[project.optional-dependencies]
-research = [
+dependencies = [
   "holehe==1.61",
   "maigret==0.6.4",
 ]

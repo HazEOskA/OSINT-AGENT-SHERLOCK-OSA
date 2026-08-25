@@ -10,12 +10,12 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from sherlock_osa.api import handler_factory  # noqa: E402
-from sherlock_osa.demo import PublicDemoService  # noqa: E402
+from sherlock_osa.standalone import StandaloneResearchService  # noqa: E402
 
 
-# Vercel's builder discovers a top-level class named ``handler`` through static
-# analysis; exporting a class through a plain assignment is not sufficient.
-_BaseHandler = handler_factory(PublicDemoService())
+# Vercel preview/product path: Sherlock runs its own bounded research engine.
+# No external OSA Execution Force control plane is called from this entrypoint.
+_BaseHandler = handler_factory(StandaloneResearchService())
 
 
 class handler(_BaseHandler):

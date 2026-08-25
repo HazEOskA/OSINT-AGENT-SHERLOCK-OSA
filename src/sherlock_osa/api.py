@@ -9,7 +9,6 @@ from typing import Any, Callable
 from urllib.parse import parse_qs, urlsplit
 
 from sherlock_osa.errors import SherlockError
-from sherlock_osa.service import MissionService
 
 
 MISSION_PATH = re.compile(r"^/api/v1/missions/([0-9a-f-]{36})$")
@@ -141,7 +140,10 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
                 return
             self._require_auth()
             if path == "/api/v1/capabilities":
-                self._json(200, service.capabilities())
+                capabilities = getattr(service, "capabilities", None)
+                if not callable(capabilities):
+                    raise SherlockError("NOT_FOUND", "Endpoint nie istnieje.", status=404)
+                self._json(200, capabilities())
                 return
             if path == "/api/v1/research/sources":
                 sources = getattr(service, "research_sources", None)
@@ -150,14 +152,23 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
                 self._json(200, sources())
                 return
             if path == "/api/v1/missions":
-                self._json(200, service.list_missions())
+                list_missions = getattr(service, "list_missions", None)
+                if not callable(list_missions):
+                    raise SherlockError("NOT_FOUND", "Endpoint nie istnieje.", status=404)
+                self._json(200, list_missions())
                 return
             if path == "/api/v1/evidence/verify":
-                self._json(200, service.verify_evidence())
+                verify_evidence = getattr(service, "verify_evidence", None)
+                if not callable(verify_evidence):
+                    raise SherlockError("NOT_FOUND", "Endpoint nie istnieje.", status=404)
+                self._json(200, verify_evidence())
                 return
             match = MISSION_PATH.fullmatch(path)
             if match:
-                self._json(200, service.get_mission(match.group(1)))
+                get_mission = getattr(service, "get_mission", None)
+                if not callable(get_mission):
+                    raise SherlockError("NOT_FOUND", "Endpoint nie istnieje.", status=404)
+                self._json(200, get_mission(match.group(1)))
                 return
             raise SherlockError("NOT_FOUND", "Endpoint nie istnieje.", status=404)
 
@@ -166,21 +177,40 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
 
         def _do_post(self) -> None:
             path, _ = self._request_target()
+
+            # Standalone preview/product path: direct bounded Sherlock research.
+            if path == "/api/v1/search":
+                search = getattr(service, "search", None)
+                if not callable(search):
+                    raise SherlockError("SEARCH_UNAVAILABLE", "Standalone search nie jest podpięty.", status=503)
+                self._json(200, search(self._body_json()))
+                return
+
             if path == "/api/v1/demo/replay":
                 demo_replay = getattr(service, "public_demo_replay", None)
                 if not callable(demo_replay):
                     raise SherlockError("NOT_FOUND", "Endpoint nie istnieje.", status=404)
                 self._json(200, demo_replay(self._body_json()))
                 return
+
             self._require_auth()
             if path == "/api/v1/missions":
-                self._json(201, service.create_mission(self._body_json()))
+                create_mission = getattr(service, "create_mission", None)
+                if not callable(create_mission):
+                    raise SherlockError("NOT_FOUND", "Endpoint nie istnieje.", status=404)
+                self._json(201, create_mission(self._body_json()))
                 return
             if path == "/api/v1/decisions":
-                self._json(200, service.decide(self._body_json()))
+                decide = getattr(service, "decide", None)
+                if not callable(decide):
+                    raise SherlockError("NOT_FOUND", "Endpoint nie istnieje.", status=404)
+                self._json(200, decide(self._body_json()))
                 return
             if path == "/api/v1/executions/simulate":
-                self._json(201, service.simulate(self._body_json()))
+                simulate = getattr(service, "simulate", None)
+                if not callable(simulate):
+                    raise SherlockError("NOT_FOUND", "Endpoint nie istnieje.", status=404)
+                self._json(201, simulate(self._body_json()))
                 return
             if path == "/api/v1/research":
                 research = getattr(service, "research", None)
@@ -216,17 +246,20 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
                 return
             match = REPLAY_PATH.fullmatch(path)
             if match:
+                replay = getattr(service, "replay", None)
+                if not callable(replay):
+                    raise SherlockError("NOT_FOUND", "Endpoint nie istnieje.", status=404)
                 body = self._body_json()
                 if not isinstance(body, dict) or body:
                     raise SherlockError("EMPTY_OBJECT_REQUIRED", "Replay body musi być pustym obiektem JSON.")
-                self._json(200, service.replay(match.group(1)))
+                self._json(200, replay(match.group(1)))
                 return
             raise SherlockError("NOT_FOUND", "Endpoint nie istnieje.", status=404)
 
     return Handler
 
 
-def create_server(service: MissionService, host: str, port: int) -> ThreadingHTTPServer:
+def create_server(service: Any, host: str, port: int) -> ThreadingHTTPServer:
     server = ThreadingHTTPServer((host, port), handler_factory(service))
     server.daemon_threads = True
     return server
