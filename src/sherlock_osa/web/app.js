@@ -1,22 +1,10 @@
 "use strict";
 
 const $ = (selector) => document.querySelector(selector);
+
 const state = {
   deploymentMode: "UNKNOWN",
-  lastMission: null,
-  lastDecision: null,
-  lastBundle: null,
 };
-
-const researchCapabilities = [
-  "osint.research.run",
-  "osint.correlation.expand",
-  "osint.email.lookup",
-  "osint.username.lookup",
-  "osint.url.trace",
-  "osint.domain.passive",
-  "intel.indicator.enrich",
-];
 
 function toast(message, error = false) {
   const element = $("#toast");
@@ -26,468 +14,210 @@ function toast(message, error = false) {
   window.setTimeout(() => { element.hidden = true; }, 5000);
 }
 
-function syncTokenInputs(value) {
-  for (const selector of ["#search-api-key", "#api-key"]) {
-    const element = $(selector);
-    if (element && value && element.value !== value) element.value = value;
-  }
-}
-
-function token() {
-  const searchValue = $("#search-api-key")?.value.trim() || "";
-  const sandboxValue = $("#api-key")?.value.trim() || "";
-  const value = searchValue || sandboxValue || sessionStorage.getItem("sherlock_api_key") || "";
-  if (value) {
-    sessionStorage.setItem("sherlock_api_key", value);
-    syncTokenInputs(value);
-  }
+function operatorToken() {
+  const input = $("#api-key");
+  const value = input?.value.trim() || sessionStorage.getItem("sherlock_api_key") || "";
+  if (value) sessionStorage.setItem("sherlock_api_key", value);
   return value;
 }
 
-async function api(path, options = {}, auth = true) {
-  const headers = { "Accept": "application/json", ...(options.headers || {}) };
+async function requestJson(path, options = {}, withAuth = false) {
+  const headers = { Accept: "application/json", ...(options.headers || {}) };
   if (options.body) headers["Content-Type"] = "application/json";
-  if (auth) headers.Authorization = `Bearer ${token()}`;
+  if (withAuth) headers.Authorization = `Bearer ${operatorToken()}`;
+
   const response = await fetch(path, { ...options, headers });
-  const body = await response.json().catch(() => ({ error: { code: "INVALID_RESPONSE", message: "Niepoprawna odpowiedź API" } }));
+  const body = await response.json().catch(() => ({
+    error: { code: "INVALID_RESPONSE", message: "Backend zwrócił niepoprawny JSON." },
+  }));
+
   if (!response.ok) {
     const error = new Error(body.error?.message || `HTTP ${response.status}`);
     error.code = body.error?.code || "HTTP_ERROR";
+    error.status = response.status;
     throw error;
   }
   return body;
 }
 
-function field(form, name) {
-  const control = form.elements.namedItem(name);
-  return control ? control.value.trim() : "";
-}
-
-function missionPayload(form) {
-  const mode = field(form, "mode");
-  const portRaw = field(form, "port");
-  const ports = portRaw && mode !== "RESEARCH_PASSIVE" ? [Number(portRaw)] : [];
-  const capabilities = mode === "RESEARCH_PASSIVE"
-    ? researchCapabilities
-    : [field(form, "capability")];
-  return {
-    goal: field(form, "goal"),
-    mode,
-    targets: [{ kind: field(form, "target_kind"), value: field(form, "target_value"), ports }],
-    allowed_capabilities: capabilities,
-    ttl_minutes: Number(field(form, "ttl_minutes")),
-    operator_id: field(form, "operator_id"),
-  };
-}
-
-function normalizePersonName(value) {
-  return value
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9\s'-]/g, " ")
-    .replace(/[\s'-]+/g, " ")
-    .trim();
-}
-
-function personUsernameTargets(value) {
-  const normalized = normalizePersonName(value);
-  const parts = normalized.split(" ").filter(Boolean);
-  if (parts.length < 2) {
-    const error = new Error("Dla trybu IMIĘ + NAZWISKO podaj co najmniej dwa człony.");
-    error.code = "PERSON_NAME_REQUIRED";
-    throw error;
+function compact(value) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
   }
-
-  const first = parts[0];
-  const last = parts[parts.length - 1];
-  const middle = parts.slice(1, -1).join("");
-  const candidates = new Set([
-    `${first}${last}`,
-    `${first}.${last}`,
-    `${first}_${last}`,
-    `${first[0]}${last}`,
-    `${last}${first}`,
-    `${last}.${first}`,
-    `${last}_${first}`,
-  ]);
-  if (middle) {
-    candidates.add(`${first}${middle}${last}`);
-    candidates.add(`${first}.${middle}.${last}`);
+  if (Array.isArray(value)) {
+    return value.map(compact).filter(Boolean).slice(0, 4).join(" · ");
   }
-
-  return [...candidates]
-    .filter((candidate) => /^[a-z0-9][a-z0-9_.-]{0,63}$/.test(candidate))
-    .slice(0, 9)
-    .map((candidate) => ({ kind: "USERNAME", value: candidate, ports: [] }));
-}
-
-function searchPayload(form) {
-  const kind = field(form, "search_kind");
-  const query = field(form, "query");
-  if (!query) {
-    const error = new Error("Wpisz wartość do wyszukania.");
-    error.code = "SEARCH_QUERY_REQUIRED";
-    throw error;
-  }
-
-  let targets;
-  if (kind === "PERSON") {
-    targets = personUsernameTargets(query);
-  } else {
-    targets = [{ kind, value: query, ports: [] }];
-  }
-
-  return {
-    goal: kind === "PERSON"
-      ? "OSINT person lookup: derive bounded username candidates and correlate public evidence"
-      : `OSINT ${kind.toLowerCase()} lookup: correlate public evidence`,
-    mode: "RESEARCH_PASSIVE",
-    targets,
-    allowed_capabilities: researchCapabilities,
-    ttl_minutes: 10,
-    operator_id: "osa-search-ui",
-  };
-}
-
-function routeFor(mode) {
-  return {
-    LAB_RANGE: "range-only",
-    RESEARCH_PASSIVE: "research-passive",
-    AUTHORIZED_EXTERNAL: "external-allowlist",
-  }[mode];
-}
-
-function renderFacts(panelSelector, gridSelector, jsonSelector, bundle, facts) {
-  const panel = $(panelSelector);
-  const grid = $(gridSelector);
-  grid.replaceChildren(...facts.map(([label, value]) => {
-    const article = document.createElement("article");
-    const span = document.createElement("span");
-    const strong = document.createElement("strong");
-    span.textContent = label;
-    strong.textContent = value;
-    article.append(span, strong);
-    return article;
-  }));
-  $(jsonSelector).textContent = JSON.stringify(bundle, null, 2);
-  panel.hidden = false;
-  panel.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
-function renderResearchResult(bundle, search = false) {
-  const research = bundle.research || {};
-  const facts = [
-    ["STATUS", research.status || "UNKNOWN"],
-    ["IDENTIFIERS", String(research.identifiers_seen ?? "UNKNOWN")],
-    ["EVIDENCE", String(research.evidence?.length ?? "UNKNOWN")],
-    ["TAINTED", String(research.tainted_evidence ?? "UNKNOWN")],
-    ["STOP", research.stop_reason || "UNKNOWN"],
-    ["PURGE", bundle.purge?.performed === true ? "DONE" : "OFF"],
-  ];
-  if (search) {
-    renderFacts("#search-result", "#search-result-grid", "#search-result-json", bundle, facts);
-  } else {
-    renderFacts("#result", "#result-grid", "#result-json", bundle, facts);
-  }
-}
-
-function renderExecutionResult(bundle) {
-  const mission = bundle.mission?.mission || {};
-  const decision = bundle.decision?.decision || {};
-  const receipt = bundle.execution?.receipt || {};
-  const replay = bundle.replay || {};
-  const isPublicReplay = bundle.deployment_mode === "PUBLIC_REPLAY_DEMO";
-  const facts = [
-    ["ENGINE", isPublicReplay ? "REPLAY VECTOR" : (mission.engine_state || "UNKNOWN")],
-    ["POLICY", decision.effect || "UNKNOWN"],
-    ["NETWORK EFFECT", String(receipt.network_effect_performed ?? "UNKNOWN").toUpperCase()],
-    ["REPLAY", replay.valid === true ? "VALID" : "UNKNOWN"],
-  ];
-  renderFacts("#result", "#result-grid", "#result-json", bundle, facts);
-}
-
-async function createResearch(payload, purgeAfter = true) {
-  const missionResponse = await api("/api/v1/missions", {
-    method: "POST",
-    body: JSON.stringify(payload),
-  });
-  const mission = missionResponse.mission;
-  state.lastMission = mission;
-  const researchResponse = await api("/api/v1/research", {
-    method: "POST",
-    body: JSON.stringify({
-      mission_id: mission.mission_id,
-      purge_after: purgeAfter,
-    }),
-  });
-  return { mission: missionResponse, ...researchResponse };
-}
-
-async function runSearch(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const button = $("#search-submit");
-  button.disabled = true;
-  button.textContent = "SEARCH → FAN-OUT → CORRELATE…";
-  try {
-    if (state.deploymentMode === "PUBLIC_REPLAY_DEMO") {
-      const error = new Error("Ten publiczny deploy jest replay-only. Live search wymaga prywatnego runtime połączonego z OSA Engine.");
-      error.code = "LIVE_RESEARCH_UNAVAILABLE";
-      throw error;
+  if (typeof value === "object") {
+    const preferred = [
+      "platform", "site", "service", "name", "username", "url", "domain",
+      "breach", "title", "date", "status", "source", "message",
+    ];
+    const parts = [];
+    for (const key of preferred) {
+      if (value[key] !== undefined && value[key] !== null) {
+        const rendered = compact(value[key]);
+        if (rendered) parts.push(`${key}: ${rendered}`);
+      }
     }
-    const payload = searchPayload(form);
-    const bundle = await createResearch(payload, true);
-    state.lastBundle = bundle;
-    renderResearchResult(bundle, true);
-    toast(`Search zakończony // evidence ${bundle.research?.evidence?.length ?? 0} // identifiers ${bundle.research?.identifiers_seen ?? 0}.`);
-  } catch (error) {
-    toast(`${error.code || "ERROR"}: ${error.message}`, true);
-  } finally {
-    button.disabled = state.deploymentMode === "PUBLIC_REPLAY_DEMO";
-    button.textContent = "SZUKAJ → CORRELATE → EVIDENCE";
+    if (parts.length) return parts.slice(0, 4).join(" · ");
+    return Object.entries(value)
+      .slice(0, 4)
+      .map(([key, item]) => `${key}: ${compact(item)}`)
+      .join(" · ");
+  }
+  return String(value);
+}
+
+function renderList(selector, items, emptyText) {
+  const container = $(selector);
+  container.replaceChildren();
+
+  if (!items?.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-item";
+    empty.textContent = emptyText;
+    container.append(empty);
+    return;
+  }
+
+  for (const item of items) {
+    const article = document.createElement("article");
+    article.className = "signal-item";
+    const text = document.createElement("p");
+    text.textContent = compact(item) || "Znaleziono sygnał.";
+    article.append(text);
+    container.append(article);
   }
 }
 
-async function runFlow(event) {
+function renderActions(actions) {
+  const container = $("#actions-list");
+  container.replaceChildren();
+
+  for (const action of actions || []) {
+    const article = document.createElement("article");
+    article.className = "action-item";
+
+    const head = document.createElement("div");
+    const priority = document.createElement("span");
+    priority.className = `priority priority-${String(action.priority || "baseline").toLowerCase()}`;
+    priority.textContent = action.priority || "ACTION";
+    const title = document.createElement("strong");
+    title.textContent = action.title || "Działanie";
+    head.append(priority, title);
+
+    const reason = document.createElement("p");
+    reason.textContent = action.reason || "";
+
+    const list = document.createElement("ol");
+    for (const step of action.steps || []) {
+      const li = document.createElement("li");
+      li.textContent = step;
+      list.append(li);
+    }
+
+    article.append(head, reason, list);
+    container.append(article);
+  }
+}
+
+function renderResult(bundle) {
+  const exposure = bundle.exposure || {};
+  const identity = bundle.identity || {};
+  const risk = bundle.risk || {};
+  const counts = exposure.counts || {};
+  const level = String(risk.level || "unknown").toUpperCase();
+
+  $("#result-title").textContent = bundle.query?.value || "Twój cyfrowy ślad";
+  $("#risk-badge").textContent = level;
+  $("#risk-badge").dataset.level = level.toLowerCase();
+  $("#ai-summary").textContent = identity.summary || "Provider nie zwrócił podsumowania AI.";
+  $("#accounts-count").textContent = String(counts.linked_accounts ?? identity.linked_accounts?.length ?? 0);
+  $("#breaches-count").textContent = String(counts.breaches ?? exposure.breaches?.length ?? 0);
+  $("#stealer-count").textContent = String(counts.infostealer ?? exposure.infostealer?.length ?? 0);
+
+  renderList("#accounts-list", identity.linked_accounts || [], "Brak połączonych kont w odpowiedzi.");
+  renderList("#breaches-list", exposure.breaches || [], "Brak sygnałów breach w odpowiedzi.");
+  renderList("#stealer-list", exposure.infostealer || [], "Brak sygnałów infostealera w odpowiedzi.");
+  renderActions(bundle.removal?.actions || []);
+
+  $("#result-json").textContent = JSON.stringify(bundle.provider?.raw ?? bundle, null, 2);
+  const result = $("#result");
+  result.hidden = false;
+  result.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function runLookup(event) {
   event.preventDefault();
   const form = event.currentTarget;
-  const button = form.querySelector("button[type=submit]");
-  button.disabled = true;
-  let payload;
-  try {
-    payload = missionPayload(form);
-    button.textContent = state.deploymentMode === "PUBLIC_REPLAY_DEMO"
-      ? "WERYFIKACJA PUBLICZNEGO REPLAYU…"
-      : payload.mode === "RESEARCH_PASSIVE"
-        ? "RESEARCH: FAN-OUT → CORRELATE → VERIFY…"
-        : "WYKONYWANIE KONTROLOWANEGO FLOW…";
+  const email = form.elements.namedItem("email").value.trim();
+  const button = $("#lookup-submit");
+  const note = $("#lookup-note");
 
-    if (state.deploymentMode === "PUBLIC_REPLAY_DEMO") {
-      const bundle = await api(
-        "/api/v1/demo/replay",
+  button.disabled = true;
+  button.textContent = "SZUKAM…";
+  note.textContent = "EmailOSINT → linked accounts → breaches → infostealer → AI synthesis";
+
+  const payload = { email };
+
+  try {
+    let result;
+    try {
+      result = await requestJson(
+        "/api/v1/lookup/email",
         { method: "POST", body: JSON.stringify(payload) },
         false,
       );
-      state.lastBundle = bundle;
-      renderExecutionResult(bundle);
-      toast("Replay VALID. Live Engine i efekty sieciowe nie zostały uruchomione.");
-      return;
+    } catch (error) {
+      if (error.status !== 401) throw error;
+
+      const token = operatorToken();
+      if (!token) {
+        $("#operator-settings").open = true;
+        const authError = new Error("Backend ma prywatny provider key. Wpisz Sherlock API key w ustawieniach operatora.");
+        authError.code = "OPERATOR_KEY_REQUIRED";
+        throw authError;
+      }
+
+      result = await requestJson(
+        "/api/v1/lookup/email",
+        { method: "POST", body: JSON.stringify(payload) },
+        true,
+      );
     }
 
-    if (payload.mode === "RESEARCH_PASSIVE") {
-      const purgeControl = form.elements.namedItem("purge_after");
-      const bundle = await createResearch(payload, Boolean(purgeControl?.checked));
-      state.lastBundle = bundle;
-      renderResearchResult(bundle, false);
-      toast(`Research zakończony // evidence ${bundle.research?.evidence?.length ?? 0} // tainted ${bundle.research?.tainted_evidence ?? 0}.`);
-      return;
-    }
-
-    const missionResponse = await api("/api/v1/missions", { method: "POST", body: JSON.stringify(payload) });
-    const mission = missionResponse.mission;
-    state.lastMission = mission;
-    const capability = payload.allowed_capabilities[0];
-    const needsPort = ["lab.http.probe", "lab.network.scan", "external.http.probe", "external.network.scan"].includes(capability);
-    const decisionPayload = {
-      mission_id: mission.mission_id,
-      capability,
-      target: payload.targets[0],
-      route: routeFor(payload.mode),
-      port: needsPort ? payload.targets[0].ports[0] : null,
-      request_id: crypto.randomUUID(),
-    };
-    const decisionResponse = await api("/api/v1/decisions", { method: "POST", body: JSON.stringify(decisionPayload) });
-    state.lastDecision = decisionResponse.decision;
-    let executionResponse = { receipt: { status: "NOT_EXECUTED" } };
-    if (decisionResponse.decision.effect === "ALLOW") {
-      executionResponse = await api("/api/v1/executions/simulate", {
-        method: "POST",
-        body: JSON.stringify({ decision_id: decisionResponse.decision.decision_id }),
-      });
-    }
-    const replayResponse = await api(`/api/v1/missions/${mission.mission_id}/replay`, {
-      method: "POST", body: "{}",
-    });
-    const bundle = { mission: missionResponse, decision: decisionResponse, execution: executionResponse, replay: replayResponse };
-    state.lastBundle = bundle;
-    renderExecutionResult(bundle);
-    toast("Flow zakończony. Sprawdź receipt i replay.");
+    renderResult(result);
+    toast(`Lookup zakończony // risk ${result.risk?.level || "unknown"}.`);
+    note.textContent = "Gotowe. Po zmianach prywatności uruchom ten sam lookup ponownie i porównaj wynik.";
   } catch (error) {
     toast(`${error.code || "ERROR"}: ${error.message}`, true);
+    note.textContent = "Lookup nie zakończył się poprawnie. Backend nie udaje wyniku zastępczego.";
   } finally {
     button.disabled = false;
-    updateFormMode();
+    button.textContent = "SPRAWDŹ ŚLAD";
   }
 }
 
-function updateSearchMode() {
-  const form = $("#search-form");
-  const kind = field(form, "search_kind");
-  const input = $("#search-query");
-  const note = $("#search-note");
-  const config = {
-    EMAIL: ["name@example.com", "Email jest seedem EMAIL i może pivotować do username/domain."],
-    USERNAME: ["username", "Nick jest seedem USERNAME i odpala bounded profile discovery."],
-    PERSON: ["Jan Kowalski", "Imię + nazwisko tworzy deterministyczne kandydaty username; nie jest udawane jako natywny provider full-name search."],
-  }[kind];
-  input.placeholder = config[0];
-  note.textContent = config[1];
-}
+async function bootstrap() {
+  $("#lookup-form").addEventListener("submit", runLookup);
 
-function updateFormMode() {
-  const form = $("#mission-form");
-  const mode = field(form, "mode");
-  const button = $("#submit-flow");
-  if (state.deploymentMode === "PUBLIC_REPLAY_DEMO") return;
-  const research = mode === "RESEARCH_PASSIVE";
-  const capability = form.elements.namedItem("capability");
-  const port = form.elements.namedItem("port");
-  const purge = form.elements.namedItem("purge_after");
-  capability.disabled = research;
-  port.disabled = research;
-  if (purge) purge.disabled = !research;
-  button.textContent = research
-    ? "ENGINE → RESEARCH → CORRELATE → PURGE"
-    : "ENGINE → SIGN → DECIDE → SIMULATE";
-  $("#form-note").textContent = research
-    ? "Publiczne/pasywne źródła only. 300 s hard stop, poison gate i local purge."
-    : "LAB worker pozostaje kontrolowany przez podpisany scope i deterministic broker.";
-}
+  const saved = sessionStorage.getItem("sherlock_api_key");
+  if (saved) $("#api-key").value = saved;
 
-function configurePublicReplay() {
-  const apiKeyField = $("#api-key-field");
-  const apiKey = $("#api-key");
-  apiKeyField.hidden = true;
-  apiKey.required = false;
-
-  const searchKeyField = $("#search-api-key-field");
-  const searchKey = $("#search-api-key");
-  searchKeyField.hidden = true;
-  searchKey.required = false;
-  for (const control of $("#search-form").elements) control.disabled = true;
-  $("#search-note").textContent = "PUBLIC REPLAY jest read-only. Live OSINT search wymaga prywatnego runtime połączonego z OSA Engine.";
-
-  const form = $("#mission-form");
-  const mode = form.elements.namedItem("mode");
-  const targetKind = form.elements.namedItem("target_kind");
-  const ttl = form.elements.namedItem("ttl_minutes");
-  mode.value = "LAB_RANGE";
-  mode.disabled = true;
-  targetKind.value = "LAB_ASSET";
-  targetKind.disabled = true;
-  ttl.max = "60";
-  if (Number(ttl.value) > 60) ttl.value = "30";
-
-  const demoCapabilities = new Set([
-    "lab.http.probe",
-    "lab.network.scan",
-    "lab.attack.simulate",
-    "blue.telemetry.replay",
-  ]);
-  const capabilitySelect = form.elements.namedItem("capability");
-  capabilitySelect.disabled = false;
-  for (const option of capabilitySelect.options) option.disabled = !demoCapabilities.has(option.value);
-  capabilitySelect.value = "lab.http.probe";
-  const purge = form.elements.namedItem("purge_after");
-  if (purge) purge.disabled = true;
-
-  const replaySteps = [
-    "Load bundled OSA receipt vector",
-    "HMAC demo scope",
-    "Capability decision",
-    "Simulation + evidence",
-    "Deterministic replay",
-  ];
-  document.querySelectorAll(".flow-list li span").forEach((element, index) => {
-    element.textContent = replaySteps[index];
-  });
-
-  $("#deployment-mode").classList.add("online");
-  $("#deployment-mode").innerHTML = "<i></i> PUBLIC REPLAY";
-  $("#mission-intro").textContent = "Publiczny deploy odtwarza jawnie oznaczony replay. Search-first UI pozostaje widoczny jako kontrakt produktu, ale live research jest fail-closed bez prywatnego runtime.";
-  $("#submit-flow").textContent = "REPLAY VECTOR → BROKER → EVIDENCE";
-  $("#form-note").textContent = "Tryb publiczny jest stateless i LAB-only. Nowe misje wymagają prywatnego runtime.";
-}
-
-async function loadStatus() {
   try {
-    const health = await api("/api/v1/health", {}, false);
-    state.deploymentMode = health.deployment_mode || "PRIVATE_CONTROL_PLANE";
-    const status = $("#service-status");
-    status.classList.add("online");
-    status.innerHTML = state.deploymentMode === "PUBLIC_REPLAY_DEMO"
-      ? "<i></i> DEMO ONLINE"
-      : "<i></i> API ONLINE";
-    if (state.deploymentMode === "PUBLIC_REPLAY_DEMO") configurePublicReplay();
-    else updateFormMode();
-    if (health.status !== "OK") status.textContent = `API ${health.status}`;
+    const health = await requestJson("/api/v1/health", {}, false);
+    state.deploymentMode = health.deployment_mode || "UNKNOWN";
+    $("#service-status").innerHTML = "<i></i> ONLINE";
+    $("#service-status").classList.add("online");
+    $("#deployment-mode").textContent =
+      health.primary_lookup_engine?.provider === "EmailOSINT"
+        ? "EMAILOSINT READY"
+        : (health.deployment_mode || "PRIVACY CENTER");
   } catch {
-    $("#service-status").textContent = "API OFFLINE";
+    $("#service-status").innerHTML = "<i></i> OFFLINE";
+    $("#service-status").classList.add("offline");
   }
 }
 
-async function loadReferences() {
-  try {
-    const result = await api("/api/v1/reference-repos", {}, false);
-    const repos = result.repositories || [];
-    $("#repo-count").textContent = `${repos.length} REPO // SNAPSHOT ${result.captured_at.slice(0, 10)}`;
-    const cards = repos.map((repo) => {
-      const card = document.createElement("article");
-      card.className = "repo";
-      const link = document.createElement("a");
-      link.href = repo.url;
-      link.target = "_blank";
-      link.rel = "noreferrer";
-      link.textContent = repo.name;
-      const description = document.createElement("p");
-      description.textContent = repo.pattern;
-      const meta = document.createElement("div");
-      meta.className = "repo-meta";
-      const plane = document.createElement("span");
-      const license = document.createElement("b");
-      plane.textContent = repo.plane;
-      license.textContent = repo.license;
-      meta.append(plane, license);
-      card.append(link, description, meta);
-      return card;
-    });
-    $("#repo-grid").replaceChildren(...cards);
-  } catch {
-    $("#repo-count").textContent = "BENCHMARK UNAVAILABLE";
-  }
-}
-
-async function verifyLedger() {
-  if (state.deploymentMode === "PUBLIC_REPLAY_DEMO") {
-    const verification = state.lastBundle?.evidence?.verification;
-    if (!verification) {
-      toast("Najpierw uruchom publiczny replay — ledger powstaje i jest sprawdzany per request.");
-      return;
-    }
-    toast(
-      verification.valid
-        ? `Ledger VALID // ${verification.record_count} rekordów // ${verification.head_hash.slice(0, 12)}…`
-        : `Ledger INVALID: ${(verification.errors || []).join(", ")}`,
-      !verification.valid,
-    );
-    return;
-  }
-  try {
-    const result = await api("/api/v1/evidence/verify");
-    toast(result.valid ? `Ledger VALID // ${result.record_count} rekordów // ${result.head_hash.slice(0, 12)}…` : `Ledger INVALID: ${result.errors.join(", ")}`, !result.valid);
-  } catch (error) {
-    toast(`${error.code || "ERROR"}: ${error.message}`, true);
-  }
-}
-
-const savedToken = sessionStorage.getItem("sherlock_api_key");
-if (savedToken) syncTokenInputs(savedToken);
-$("#search-form").addEventListener("submit", runSearch);
-$("#search-kind").addEventListener("change", updateSearchMode);
-$("#mission-form").addEventListener("submit", runFlow);
-$("#mission-form").elements.namedItem("mode").addEventListener("change", updateFormMode);
-$("#verify-ledger")?.addEventListener("click", verifyLedger);
-updateSearchMode();
-loadStatus();
-loadReferences();
+document.addEventListener("DOMContentLoaded", bootstrap);

@@ -4,177 +4,173 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <title>Sherlock OSA — Evidence-First Research Runtime</title>
+  <meta name="description" content="Sherlock OSA — prywatnościowy self-OSINT: identity, exposure, risk, removal, verification.">
+  <title>Sherlock OSA — sprawdź swój cyfrowy ślad</title>
   <link rel="stylesheet" href="/assets/styles.css">
 </head>
 <body>
-  <div class="noise" aria-hidden="true"></div>
+  <div class="ambient ambient-a" aria-hidden="true"></div>
+  <div class="ambient ambient-b" aria-hidden="true"></div>
+
   <header class="topbar">
     <a class="brand" href="#top" aria-label="Sherlock OSA">
       <span class="brand-mark">S//O</span>
-      <span><strong>SHERLOCK OSA</strong><small>EVIDENCE-FIRST RESEARCH RUNTIME</small></span>
+      <span>
+        <strong>SHERLOCK OSA</strong>
+        <small>DIGITAL FOOTPRINT CONTROL</small>
+      </span>
     </a>
     <div class="status-row">
-      <span class="pill pill-green"><i></i> DEFAULT DENY</span>
-      <span class="pill" id="deployment-mode"><i></i> RUNTIME</span>
       <span class="pill" id="service-status"><i></i> ŁĄCZENIE</span>
+      <span class="pill accent" id="deployment-mode">PRIVACY CENTER</span>
     </div>
   </header>
 
   <main id="top">
-    <section class="hero search-hero">
+    <section class="hero">
       <div class="hero-copy">
-        <p class="eyebrow">SEARCH FIRST // OSA-GATED RESEARCH</p>
-        <h1>Wpisz ślad.<br><em>Sherlock zrobi resztę.</em></h1>
-        <p class="lead">Email, nick albo imię i nazwisko trafiają do jednego bounded research flow. OSA Engine podpisuje scope, Sherlock odpala pasywne źródła, koreluje evidence i zatrzymuje recursion przy limitach.</p>
-        <div class="search-badges" aria-label="Obsługiwane wejścia">
-          <span>EMAIL</span><span>NICK</span><span>IMIĘ + NAZWISKO</span>
+        <p class="eyebrow">SELF-OSINT // PRIVACY CONTROL CENTER</p>
+        <h1>Sprawdź, co internet<br><em>wie o Tobie.</em></h1>
+        <p class="lead">
+          Jeden email uruchamia właściwy lookup engine. Sherlock porządkuje wynik w pięciu
+          warstwach: tożsamość, ekspozycja, ryzyko, usuwanie i ponowna weryfikacja.
+        </p>
+
+        <div class="flow-strip" aria-label="Przepływ produktu">
+          <span class="active">01 IDENTITY</span>
+          <span>02 EXPOSURE</span>
+          <span>03 RISK</span>
+          <span>04 REMOVAL</span>
+          <span>05 VERIFICATION</span>
         </div>
       </div>
 
-      <form class="search-console" id="search-form">
-        <div class="search-console-head">
-          <div><span>PRIMARY INTAKE</span><strong>OSINT SEARCH</strong></div>
-          <b>OSA ENGINE</b>
+      <form class="lookup-card" id="lookup-form">
+        <div class="lookup-head">
+          <div>
+            <span>PRIMARY ENGINE</span>
+            <strong>EMAIL INTELLIGENCE</strong>
+          </div>
+          <b>EMAILOSINT</b>
         </div>
-        <label id="search-api-key-field">Klucz operatora
-          <input id="search-api-key" name="api_key" type="password" autocomplete="off" placeholder="SHERLOCK_API_KEY" required>
-        </label>
-        <div class="search-grid">
-          <label>Typ wyszukiwania
-            <select name="search_kind" id="search-kind">
-              <option value="EMAIL">EMAIL</option>
-              <option value="USERNAME">NICK / USERNAME</option>
-              <option value="PERSON">IMIĘ + NAZWISKO</option>
-            </select>
-          </label>
-          <label>Fraza
-            <input name="query" id="search-query" placeholder="name@example.com" autocomplete="off" required>
-          </label>
+
+        <label class="input-label" for="lookup-email">Twój email</label>
+        <div class="lookup-row">
+          <input
+            id="lookup-email"
+            name="email"
+            type="email"
+            autocomplete="email"
+            placeholder="name@example.com"
+            required
+          >
+          <button class="button primary" id="lookup-submit" type="submit">SPRAWDŹ ŚLAD</button>
         </div>
-        <button class="button primary full search-submit" id="search-submit" type="submit">SZUKAJ → CORRELATE → EVIDENCE</button>
-        <p class="form-note" id="search-note">PERSON tworzy kontrolowany zestaw kandydatów username z imienia i nazwiska; źródła pozostają pasywne i ograniczone kontraktem runtime.</p>
+
+        <details class="operator-settings" id="operator-settings">
+          <summary>Ustawienia operatora</summary>
+          <label for="api-key">Sherlock API key — potrzebny tylko, gdy backend używa prywatnego klucza providera</label>
+          <input id="api-key" type="password" autocomplete="off" placeholder="opcjonalnie">
+        </details>
+
+        <p class="form-note" id="lookup-note">
+          Lookup korzysta z backendowego adaptera. Klucz providera nigdy nie trafia do przeglądarki.
+        </p>
       </form>
     </section>
 
-    <section class="metrics" aria-label="Status systemu">
-      <article><span>ROUTER</span><strong>OSA ENGINE</strong><small>jedyny router intencji</small></article>
-      <article><span>RESEARCH</span><strong>BOUNDED FAN-OUT</strong><small>Holehe + Maigret + archive + CT</small></article>
-      <article><span>TRUST</span><strong>POISON GATE</strong><small>tainted evidence nie pivotuje</small></article>
-      <article><span>RETENTION</span><strong>EPHEMERAL</strong><small>local purge domyślnie ON</small></article>
+    <section class="signal-bar" aria-label="Silnik">
+      <article><span>IDENTITY</span><strong>100+ SOURCES</strong><small>linked accounts</small></article>
+      <article><span>EXPOSURE</span><strong>BREACH DATA</strong><small>publiczne sygnały wycieków</small></article>
+      <article><span>RISK</span><strong>INFOSTEALER</strong><small>sygnały przejęcia danych</small></article>
+      <article><span>ANALYST</span><strong>AI SUMMARY</strong><small>synteza nad wynikami</small></article>
     </section>
 
-    <section class="section result-panel search-result" id="search-result" hidden>
-      <div class="section-title"><p class="eyebrow">SEARCH RECEIPT</p><h2>Wynik wyszukiwania</h2></div>
-      <div class="result-grid" id="search-result-grid"></div>
-      <pre class="result-json"><code id="search-result-json"></code></pre>
-    </section>
-
-    <section class="section architecture">
-      <div class="section-title">
-        <p class="eyebrow">RESEARCH PIPELINE</p>
-        <h2>Jedno wejście. Kontrolowana rekurencja.</h2>
-      </div>
-      <div class="zone-grid">
-        <article class="zone active"><span class="zone-no">01</span><h3>Control</h3><p>OSA Engine, podpisany scope i deterministic capability broker.</p><small>BACKED</small></article>
-        <article class="zone active"><span class="zone-no">02</span><h3>Sources</h3><p>Holehe, Maigret, Wayback CDX i crt.sh w bounded source pack.</p><small>BOUNDED NETWORK</small></article>
-        <article class="zone active"><span class="zone-no">03</span><h3>Correlation</h3><p>Email / username → profile URL → domain / archive; typed pivots i dedupe.</p><small>BACKED LOCAL</small></article>
-        <article class="zone active"><span class="zone-no">04</span><h3>Evidence</h3><p>Poison checker, hash metadata, ograniczony retention i lokalny purge.</p><small>BACKED</small></article>
-      </div>
-    </section>
-
-    <section class="section mission-layout sandbox" id="mission">
-      <div class="mission-copy">
-        <p class="eyebrow">ADVANCED SANDBOX</p>
-        <h2>Agent mission / ręczny scope</h2>
-        <p id="mission-intro">To jest panel zaawansowany. Primary UX jest wyżej: search intake. Tutaj możesz ręcznie sterować trybem, targetem, capability, TTL i operatorem bez zmiany kontraktu OSA Engine.</p>
-        <ol class="flow-list">
-          <li><b>01</b><span>Engine resolve + run</span></li>
-          <li><b>02</b><span>Signed mission scope</span></li>
-          <li><b>03</b><span>Capability decision / research gate</span></li>
-          <li><b>04</b><span>Execution or bounded research</span></li>
-          <li><b>05</b><span>Evidence + replay / purge</span></li>
-        </ol>
-      </div>
-
-      <form class="mission-form" id="mission-form">
-        <label id="api-key-field">Klucz operatora
-          <input id="api-key" name="api_key" type="password" autocomplete="off" placeholder="SHERLOCK_API_KEY" required>
-        </label>
-        <label>Cel misji
-          <textarea name="goal" rows="3" required>Zbierz pasywne publiczne ślady, skoreluj wiarygodne identyfikatory i zwróć evidence-first report</textarea>
-        </label>
-        <div class="form-row">
-          <label>Tryb
-            <select name="mode">
-              <option value="RESEARCH_PASSIVE" selected>RESEARCH_PASSIVE</option>
-              <option value="LAB_RANGE">LAB_RANGE</option>
-              <option value="AUTHORIZED_EXTERNAL">AUTHORIZED_EXTERNAL — BLOCKED</option>
-            </select>
-          </label>
-          <label>TTL (min)
-            <input name="ttl_minutes" type="number" min="1" max="1440" value="10" required>
-          </label>
+    <section class="results" id="result" hidden>
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">FOOTPRINT REPORT</p>
+          <h2 id="result-title">Twój cyfrowy ślad</h2>
         </div>
-        <div class="form-row">
-          <label>Typ targetu
-            <select name="target_kind">
-              <option value="EMAIL">EMAIL</option>
-              <option value="USERNAME">USERNAME</option>
-              <option value="URL">URL</option>
-              <option value="DOMAIN">DOMAIN</option>
-              <option value="INDICATOR">INDICATOR</option>
-              <option value="LAB_ASSET">LAB_ASSET</option>
-            </select>
-          </label>
-          <label>Target
-            <input name="target_value" placeholder="name@example.com / username / https://… / example.com" required>
-          </label>
-        </div>
-        <div class="form-row">
-          <label>Capability / lab operation
-            <select name="capability">
-              <option value="osint.research.run">osint.research.run</option>
-              <option value="lab.http.probe">lab.http.probe</option>
-              <option value="lab.network.scan">lab.network.scan</option>
-              <option value="lab.attack.simulate">lab.attack.simulate</option>
-              <option value="blue.telemetry.replay">blue.telemetry.replay</option>
-            </select>
-          </label>
-          <label>Port (tylko lab/external)
-            <input name="port" type="number" min="1" max="65535" value="3000">
-          </label>
-        </div>
-        <label>Operator ID
-          <input name="operator_id" value="osa" required>
-        </label>
-        <label class="inline-check">
-          <input name="purge_after" type="checkbox" checked>
-          Usuń lokalny scope i decyzje po zwróceniu research reportu
-        </label>
-        <button class="button primary full" id="submit-flow" type="submit">ENGINE → RESEARCH → CORRELATE → PURGE</button>
-        <p class="form-note" id="form-note">Publiczne/pasywne źródła only. Sandbox nie omija OSA Engine ani capability brokera.</p>
-      </form>
-    </section>
-
-    <section class="section result-panel" id="result" hidden>
-      <div class="section-title"><p class="eyebrow">MISSION RECEIPT</p><h2>Wynik sandbox flow</h2></div>
-      <div class="result-grid" id="result-grid"></div>
-      <pre class="result-json"><code id="result-json"></code></pre>
-    </section>
-
-    <section class="section references">
-      <div class="section-title row-title">
-        <div><p class="eyebrow">REFERENCE SYSTEMS</p><h2>Wzorce źródeł i kontroli, bez udawania własności ich kodu.</h2></div>
-        <span id="repo-count">ŁADOWANIE…</span>
+        <span class="risk-badge" id="risk-badge">UNKNOWN</span>
       </div>
-      <div class="repo-grid" id="repo-grid"></div>
+
+      <div class="summary-grid">
+        <article class="summary-card wide">
+          <span>AI SYNTHESIS</span>
+          <p id="ai-summary">Brak podsumowania.</p>
+        </article>
+        <article class="summary-card">
+          <span>LINKED ACCOUNTS</span>
+          <strong id="accounts-count">0</strong>
+        </article>
+        <article class="summary-card">
+          <span>BREACHES</span>
+          <strong id="breaches-count">0</strong>
+        </article>
+        <article class="summary-card">
+          <span>INFOSTEALER</span>
+          <strong id="stealer-count">0</strong>
+        </article>
+      </div>
+
+      <div class="report-grid">
+        <section class="report-panel">
+          <div class="panel-title"><span>01</span><h3>Identity</h3></div>
+          <div class="item-list" id="accounts-list"></div>
+        </section>
+
+        <section class="report-panel">
+          <div class="panel-title"><span>02</span><h3>Exposure</h3></div>
+          <div class="subhead">BREACHES</div>
+          <div class="item-list" id="breaches-list"></div>
+          <div class="subhead">INFOSTEALER</div>
+          <div class="item-list" id="stealer-list"></div>
+        </section>
+
+        <section class="report-panel action-panel">
+          <div class="panel-title"><span>03–05</span><h3>Risk → Removal → Verification</h3></div>
+          <div class="action-list" id="actions-list"></div>
+        </section>
+      </div>
+
+      <details class="raw-result">
+        <summary>Surowy, zredagowany wynik providera</summary>
+        <pre><code id="result-json"></code></pre>
+      </details>
+    </section>
+
+    <section class="product-section">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">ARCHITECTURE</p>
+          <h2>Engine najpierw. Warstwy później.</h2>
+        </div>
+      </div>
+
+      <div class="layer-grid">
+        <article>
+          <b>LAYER 1</b>
+          <h3>EmailOSINT adapter</h3>
+          <p>To jest primary lookup: linked accounts, breach signals, infostealer i AI synthesis.</p>
+        </article>
+        <article>
+          <b>LAYER 2</b>
+          <h3>Sherlock enrichment</h3>
+          <p>Holehe, Maigret, Wayback i crt.sh zostają jako dodatkowe źródła i korelacja.</p>
+        </article>
+        <article>
+          <b>LAYER 3</b>
+          <h3>OSA agent runtime</h3>
+          <p>Misje, scope, evidence ledger i agent są warstwą sterującą — nie landingiem produktu.</p>
+        </article>
+      </div>
     </section>
   </main>
 
   <footer>
-    <span>SHERLOCK OSA // SEARCH-FIRST UI</span>
-    <span>TRUTH BEFORE CONFIDENCE</span>
+    <span>SHERLOCK OSA // DIGITAL FOOTPRINT CONTROL</span>
+    <span>IDENTITY → EXPOSURE → RISK → REMOVAL → VERIFICATION</span>
   </footer>
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>

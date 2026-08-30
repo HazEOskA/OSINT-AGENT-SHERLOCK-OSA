@@ -47,25 +47,40 @@ def main() -> int:
     repositories = benchmark.get("repositories", [])
     checks.append(("reference_count_20", len(repositories) == 20))
     checks.append(("reference_unique", len({item["name"] for item in repositories}) == 20))
-    checks.append(("engine_pin_documented", "f365360383511fea13cd3f7af36ecbbc720ce38d" in (ROOT / "README.md").read_text(encoding="utf-8")))
+    checks.append((
+        "engine_pin_documented",
+        "f365360383511fea13cd3f7af36ecbbc720ce38d"
+        in (ROOT / "README.md").read_text(encoding="utf-8"),
+    ))
+    checks.append((
+        "emailosint_primary_documented",
+        "POST /api/v1/lookup/email" in (ROOT / "README.md").read_text(encoding="utf-8"),
+    ))
 
     parser = UiContractParser()
     parser.feed((SRC / "sherlock_osa" / "web" / "index.html").read_text(encoding="utf-8"))
     required_ids = {
-        "mission-form",
+        "lookup-form",
+        "lookup-email",
+        "lookup-submit",
         "api-key",
         "deployment-mode",
         "result",
-        "repo-grid",
         "service-status",
-        "submit-flow",
+        "accounts-list",
+        "breaches-list",
+        "stealer-list",
+        "actions-list",
+        "result-json",
     }
     checks.append(("ui_required_elements", required_ids <= parser.ids))
     checks.append(("ui_external_script_only", parser.external_scripts == 1 and parser.inline_scripts == 0))
+
     styles = (SRC / "sherlock_osa" / "web" / "styles.css").read_text(encoding="utf-8")
     javascript_source = (SRC / "sherlock_osa" / "web" / "app.js").read_text(encoding="utf-8")
     checks.append(("ui_hidden_contract", "[hidden] { display: none !important; }" in styles))
-    checks.append(("ui_demo_capability_filter", "option.disabled = !demoCapabilities.has" in javascript_source))
+    checks.append(("ui_primary_lookup_route", '"/api/v1/lookup/email"' in javascript_source))
+
     node = shutil.which("node")
     if node:
         javascript = subprocess.run(

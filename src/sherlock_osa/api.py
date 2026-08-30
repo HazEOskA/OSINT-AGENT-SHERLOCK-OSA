@@ -8,6 +8,7 @@ from importlib.resources import files
 from typing import Any, Callable
 from urllib.parse import parse_qs, urlsplit
 
+from sherlock_osa.emailosint import EmailOsintClient
 from sherlock_osa.errors import SherlockError
 from sherlock_osa.service import MissionService
 
@@ -23,7 +24,7 @@ ASSETS = {
 
 def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
-        server_version = "SherlockOSA/0.3.0"
+        server_version = "SherlockOSA/0.4.0"
         sys_version = ""
 
         def log_message(self, format_string: str, *args: object) -> None:
@@ -73,7 +74,11 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
 
         def _require_auth(self) -> None:
             if not self._authorised():
-                raise SherlockError("UNAUTHORIZED", "Wymagany poprawny operator Bearer token.", status=401)
+                raise SherlockError(
+                    "UNAUTHORIZED",
+                    "Wymagany poprawny operator Bearer token.",
+                    status=401,
+                )
 
         def _body_json(self) -> object:
             raw_length = self.headers.get("Content-Length")
@@ -118,7 +123,10 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
                 else:
                     self._json(exc.status, exc.as_dict())
             except Exception:
-                self._json(500, {"error": {"code": "INTERNAL_ERROR", "message": "Błąd wewnętrzny."}})
+                self._json(
+                    500,
+                    {"error": {"code": "INTERNAL_ERROR", "message": "Błąd wewnętrzny."}},
+                )
 
         def do_GET(self) -> None:  # noqa: N802
             self._route(self._do_get)
@@ -134,11 +142,24 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
                 probe = query.get("probe_engine", ["false"])[0].lower() == "true"
                 if probe:
                     self._require_auth()
-                self._json(200, service.health(probe_engine=probe))
+                payload = service.health(probe_engine=probe)
+                if isinstance(payload, dict):
+                    payload = dict(payload)
+                    payload["primary_lookup_engine"] = {
+                        "provider": "EmailOSINT",
+                        "endpoint_configured": bool(
+                            getattr(service.settings, "emailosint_endpoint", "")
+                        ),
+                        "provider_key_configured": bool(
+                            getattr(service.settings, "emailosint_api_key", "")
+                        ),
+                    }
+                self._json(200, payload)
                 return
             if path == "/api/v1/reference-repos":
                 self._json(200, service.reference_repositories())
                 return
+
             self._require_auth()
             if path == "/api/v1/capabilities":
                 self._json(200, service.capabilities())
@@ -146,7 +167,11 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
             if path == "/api/v1/research/sources":
                 sources = getattr(service, "research_sources", None)
                 if not callable(sources):
-                    raise SherlockError("RESEARCH_UNAVAILABLE", "Research service nie jest podpięty.", status=503)
+                    raise SherlockError(
+                        "RESEARCH_UNAVAILABLE",
+                        "Research service nie jest podpięty.",
+                        status=503,
+                    )
                 self._json(200, sources())
                 return
             if path == "/api/v1/missions":
@@ -166,12 +191,21 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
 
         def _do_post(self) -> None:
             path, _ = self._request_target()
+
+            if path == "/api/v1/lookup/email":
+                if getattr(service.settings, "emailosint_api_key", ""):
+                    self._require_auth()
+                client = EmailOsintClient.from_settings(service.settings)
+                self._json(200, client.lookup(self._body_json()))
+                return
+
             if path == "/api/v1/demo/replay":
                 demo_replay = getattr(service, "public_demo_replay", None)
                 if not callable(demo_replay):
                     raise SherlockError("NOT_FOUND", "Endpoint nie istnieje.", status=404)
                 self._json(200, demo_replay(self._body_json()))
                 return
+
             self._require_auth()
             if path == "/api/v1/missions":
                 self._json(201, service.create_mission(self._body_json()))
@@ -185,13 +219,21 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
             if path == "/api/v1/research":
                 research = getattr(service, "research", None)
                 if not callable(research):
-                    raise SherlockError("RESEARCH_UNAVAILABLE", "Research service nie jest podpięty.", status=503)
+                    raise SherlockError(
+                        "RESEARCH_UNAVAILABLE",
+                        "Research service nie jest podpięty.",
+                        status=503,
+                    )
                 self._json(200, research(self._body_json()))
                 return
             if path == "/api/v1/research/stream":
                 research = getattr(service, "research", None)
                 if not callable(research):
-                    raise SherlockError("RESEARCH_UNAVAILABLE", "Research service nie jest podpięty.", status=503)
+                    raise SherlockError(
+                        "RESEARCH_UNAVAILABLE",
+                        "Research service nie jest podpięty.",
+                        status=503,
+                    )
                 body = self._body_json()
                 self._start_sse()
                 try:
@@ -218,7 +260,10 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
             if match:
                 body = self._body_json()
                 if not isinstance(body, dict) or body:
-                    raise SherlockError("EMPTY_OBJECT_REQUIRED", "Replay body musi być pustym obiektem JSON.")
+                    raise SherlockError(
+                        "EMPTY_OBJECT_REQUIRED",
+                        "Replay body musi być pustym obiektem JSON.",
+                    )
                 self._json(200, service.replay(match.group(1)))
                 return
             raise SherlockError("NOT_FOUND", "Endpoint nie istnieje.", status=404)

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from sherlock_osa import ENGINE_PIN
+from sherlock_osa.emailosint import DEFAULT_EMAILOSINT_ENDPOINT
 from sherlock_osa.errors import ConfigurationError
 
 
@@ -48,12 +49,6 @@ def _integer(name: str, default: int, minimum: int, maximum: int) -> int:
 
 
 def _managed_runtime_port() -> int | None:
-    """Return the platform-owned PORT when present.
-
-    Managed runtimes such as Cloud Run inject PORT and require the process to
-    listen on 0.0.0.0 at exactly that port. Local SHERLOCK_HOST/PORT settings
-    must never override that contract.
-    """
     raw = os.getenv("PORT", "").strip()
     if not raw:
         return None
@@ -63,6 +58,20 @@ def _managed_runtime_port() -> int | None:
         raise ConfigurationError("INVALID_CONFIG", "PORT musi być liczbą całkowitą.") from exc
     if not 1 <= value <= 65535:
         raise ConfigurationError("INVALID_CONFIG", "PORT poza zakresem 1..65535.")
+    return value
+
+
+def _http_url(name: str, default: str) -> str:
+    value = os.getenv(name, default).strip().rstrip("/")
+    if not value.startswith(("http://", "https://")):
+        raise ConfigurationError("INVALID_CONFIG", f"{name} musi używać http:// lub https://.")
+    return value
+
+
+def _header_name(name: str, default: str) -> str:
+    value = os.getenv(name, default).strip()
+    if not value or "\r" in value or "\n" in value or ":" in value:
+        raise ConfigurationError("INVALID_CONFIG", f"{name} nie jest poprawną nazwą nagłówka.")
     return value
 
 
@@ -80,15 +89,19 @@ class Settings:
     engine_timeout_seconds: int = 15
     max_body_bytes: int = 1_048_576
     max_mission_ttl_minutes: int = 1_440
+    emailosint_endpoint: str = DEFAULT_EMAILOSINT_ENDPOINT
+    emailosint_api_key: str = ""
+    emailosint_auth_header: str = "Authorization"
+    emailosint_auth_scheme: str = "Bearer"
+    emailosint_timeout_seconds: int = 30
 
     @classmethod
     def from_env(cls) -> "Settings":
         engine_sha = os.getenv("OSA_ENGINE_COMMIT_SHA", ENGINE_PIN).strip().lower()
         if len(engine_sha) != 40 or any(char not in "0123456789abcdef" for char in engine_sha):
             raise ConfigurationError("INVALID_ENGINE_SHA", "OSA_ENGINE_COMMIT_SHA musi być pełnym SHA-1.")
-        engine_url = os.getenv("OSA_ENGINE_URL", "http://127.0.0.1:8643").strip().rstrip("/")
-        if not engine_url.startswith(("http://", "https://")):
-            raise ConfigurationError("INVALID_ENGINE_URL", "OSA_ENGINE_URL musi używać http:// lub https://.")
+        engine_url = _http_url("OSA_ENGINE_URL", "http://127.0.0.1:8643")
+        emailosint_endpoint = _http_url("EMAILOSINT_ENDPOINT", DEFAULT_EMAILOSINT_ENDPOINT)
 
         managed_port = _managed_runtime_port()
         if managed_port is not None:
@@ -109,4 +122,9 @@ class Settings:
             host=runtime_host,
             port=runtime_port,
             engine_timeout_seconds=_integer("SHERLOCK_ENGINE_TIMEOUT_SECONDS", 15, 1, 120),
+            emailosint_endpoint=emailosint_endpoint,
+            emailosint_api_key=os.getenv("EMAILOSINT_API_KEY", "").strip(),
+            emailosint_auth_header=_header_name("EMAILOSINT_AUTH_HEADER", "Authorization"),
+            emailosint_auth_scheme=os.getenv("EMAILOSINT_AUTH_SCHEME", "Bearer").strip(),
+            emailosint_timeout_seconds=_integer("EMAILOSINT_TIMEOUT_SECONDS", 30, 1, 120),
         )
