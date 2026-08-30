@@ -56,10 +56,10 @@ class ApiTests(unittest.TestCase):
         status, headers, body = self.request_bytes("/")
         self.assertEqual(status, 200)
         self.assertIn(b"SHERLOCK OSA", body)
-        self.assertIn(b'id="mission-form"', body)
+        self.assertIn(b'id="lookup-form"', body)
         self.assertIn("frame-ancestors 'none'", headers["Content-Security-Policy"])
         self.assertEqual(headers["X-Frame-Options"], "DENY")
-        for path, marker in (("/assets/styles.css", b"--green"), ("/assets/app.js", b"runFlow")):
+        for path, marker in (("/assets/styles.css", b"--accent"), ("/assets/app.js", b"runLookup")):
             asset_status, _, asset_body = self.request_bytes(path)
             self.assertEqual(asset_status, 200)
             self.assertIn(marker, asset_body)
