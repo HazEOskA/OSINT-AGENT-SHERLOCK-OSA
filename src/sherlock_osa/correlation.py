@@ -23,6 +23,11 @@ _KEY_KIND = {
     "emails": "EMAIL",
     "mail": "EMAIL",
     "mails": "EMAIL",
+    "public_email": "EMAIL",
+    "phone": "PHONE",
+    "phones": "PHONE",
+    "mobile": "PHONE",
+    "telephone": "PHONE",
     "username": "USERNAME",
     "usernames": "USERNAME",
     "handle": "USERNAME",
@@ -40,6 +45,9 @@ _KEY_KIND = {
     "profile_url": "URL",
     "website": "URL",
     "websites": "URL",
+    "website_url": "URL",
+    "web_url": "URL",
+    "html_url": "URL",
 }
 
 
@@ -189,8 +197,14 @@ class CorrelationEngine:
                 return
             if isinstance(value, Mapping):
                 service = self._first_text(value, ("service", "platform", "site"))
-                username = self._first_text(value, ("username", "handle", "nickname", "nick"))
-                profile_url = self._first_text(value, ("profile_url", "url", "website", "link"))
+                username = self._first_text(
+                    value,
+                    ("username", "handle", "nickname", "nick", "login", "twitter_username"),
+                )
+                profile_url = self._first_text(
+                    value,
+                    ("profile_url", "url", "website", "website_url", "web_url", "html_url", "link"),
+                )
                 domain = self._first_text(value, ("domain", "host", "hostname"))
                 if service and (username or profile_url or domain):
                     account_value = "|".join(
@@ -345,7 +359,12 @@ class CorrelationEngine:
     ) -> AssertionLevel:
         if status is FindingStatus.CONFLICTED:
             return AssertionLevel.HYPOTHESIS
-        direct_high = any(item.direct and item.evidence.confidence >= 0.9 for item in items)
+        direct_high = any(
+            item.direct
+            and item.evidence.confidence >= 0.9
+            and not self._negative_presence(item.evidence.fields)
+            for item in items
+        )
         if direct_high and source_count >= 1:
             return AssertionLevel.FACT
         if source_count >= 2:
@@ -361,6 +380,16 @@ class CorrelationEngine:
             if candidate.count("@") != 1 or len(candidate) > 320:
                 return ""
             return candidate.casefold()
+        if kind == "PHONE":
+            raw = candidate
+            if raw.startswith("00"):
+                raw = "+" + raw[2:]
+            if not raw.startswith("+"):
+                return ""
+            digits = "".join(ch for ch in raw if ch.isdigit())
+            if not 8 <= len(digits) <= 15:
+                return ""
+            return "+" + digits
         if kind == "USERNAME":
             if len(candidate) > 64:
                 return ""
@@ -377,6 +406,13 @@ class CorrelationEngine:
                 return ""
             return candidate
         return candidate[:2048]
+
+    def _negative_presence(self, fields: Mapping[str, Any]) -> bool:
+        for key in ("found", "exists", "registered"):
+            value = fields.get(key)
+            if value is False:
+                return True
+        return False
 
     def _source_family(self, module: str) -> str:
         return module.split(".", 1)[0].casefold() if module else "unknown"
