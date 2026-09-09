@@ -24,7 +24,7 @@ ASSETS = {
 
 def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
-        server_version = "SherlockOSA/0.5.0"
+        server_version = "SherlockOSA/0.6.0"
         sys_version = ""
 
         def log_message(self, format_string: str, *args: object) -> None:
@@ -207,6 +207,35 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
                 return
 
             self._require_auth()
+
+            if path == "/api/v1/search/stream":
+                search = getattr(service, "full_search", None)
+                if not callable(search):
+                    raise SherlockError(
+                        "SEARCH_UNAVAILABLE",
+                        "Full Search nie jest podpięty.",
+                        status=503,
+                    )
+                body = self._body_json()
+                self._start_sse()
+                try:
+                    result = search(body, event_sink=self._sse)
+                    self._sse("case_result", result)
+                except SherlockError as exc:
+                    self._sse("error", exc.as_dict())
+                except Exception:
+                    self._sse(
+                        "error",
+                        {
+                            "error": {
+                                "code": "INTERNAL_ERROR",
+                                "message": "Błąd wewnętrzny Full Search.",
+                            }
+                        },
+                    )
+                finally:
+                    self.close_connection = True
+                return
 
             if path == "/api/v1/search":
                 search = getattr(service, "full_search", None)
