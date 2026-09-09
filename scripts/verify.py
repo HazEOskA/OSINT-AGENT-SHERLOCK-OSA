@@ -69,6 +69,7 @@ def main() -> int:
         "source-runs",
         "timeline-list",
         "identity-list",
+        "graph-list",
         "api-key",
         "deployment-mode",
         "result",
