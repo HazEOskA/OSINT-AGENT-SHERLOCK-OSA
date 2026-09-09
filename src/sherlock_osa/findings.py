@@ -84,6 +84,9 @@ class SourceRun:
     status: str
     evidence_count: int = 0
     error: str | None = None
+    reason: str | None = None
+    duration_ms: int = 0
+    rate_limited: bool = False
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -92,6 +95,9 @@ class SourceRun:
             "status": self.status,
             "evidence_count": self.evidence_count,
             "error": self.error,
+            "reason": self.reason,
+            "duration_ms": self.duration_ms,
+            "rate_limited": self.rate_limited,
         }
 
 
@@ -142,6 +148,13 @@ class InvestigationSummary:
     module_invocations: int
     duration_ms: int
     stop_reason: str
+    sources_considered: int = 0
+    sources_skipped: int = 0
+    source_errors: int = 0
+    identity_clusters: int = 0
+    timeline_events: int = 0
+    graph_nodes: int = 0
+    graph_edges: int = 0
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -154,6 +167,13 @@ class InvestigationSummary:
             "module_invocations": self.module_invocations,
             "duration_ms": self.duration_ms,
             "stop_reason": self.stop_reason,
+            "sources_considered": self.sources_considered,
+            "sources_skipped": self.sources_skipped,
+            "source_errors": self.source_errors,
+            "identity_clusters": self.identity_clusters,
+            "timeline_events": self.timeline_events,
+            "graph_nodes": self.graph_nodes,
+            "graph_edges": self.graph_edges,
         }
 
 
