@@ -426,7 +426,7 @@ class BoundedResearchEngine:
                         {
                             "research_id": research_id,
                             "module": module.name,
-                            "family": getattr(descriptor, "family", "LOCAL"),
+                            "family": getattr(descriptor, "family", getattr(module, "family", "LOCAL")),
                             "identifier_kind": identifier.kind.value,
                             "identifier_depth": identifier.depth,
                         },
@@ -447,7 +447,7 @@ class BoundedResearchEngine:
                     payload = {
                         "research_id": research_id,
                         "module": module.name,
-                        "family": getattr(descriptor, "family", "LOCAL"),
+                        "family": getattr(descriptor, "family", getattr(module, "family", "LOCAL")),
                         "identifier_kind": identifier.kind.value,
                         "identifier_depth": identifier.depth,
                         "error": type(outcome).__name__,
@@ -468,7 +468,7 @@ class BoundedResearchEngine:
                     {
                         "research_id": research_id,
                         "module": module.name,
-                        "family": getattr(descriptor, "family", "LOCAL"),
+                        "family": getattr(descriptor, "family", getattr(module, "family", "LOCAL")),
                         "identifier_kind": identifier.kind.value,
                         "identifier_depth": identifier.depth,
                         "duration_ms": duration_ms,
@@ -484,7 +484,7 @@ class BoundedResearchEngine:
                         {
                             "research_id": research_id,
                             "module": module.name,
-                            "family": getattr(descriptor, "family", "LOCAL"),
+                            "family": getattr(descriptor, "family", getattr(module, "family", "LOCAL")),
                             "count": rate_limited_count,
                         },
                     )
