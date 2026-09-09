@@ -50,6 +50,7 @@ class InvestigationResult:
     identity_clusters: tuple[IdentityCluster, ...]
     graph: EvidenceGraph
     timeline: tuple[TimelineEvent, ...]
+    sensor_payloads: Mapping[str, object]
     source_runs: tuple[SourceRun, ...]
     summary: InvestigationSummary
     result_sha256: str
@@ -67,6 +68,7 @@ class InvestigationResult:
             "identity_clusters": [cluster.to_dict() for cluster in self.identity_clusters],
             "graph": self.graph.to_dict(),
             "timeline": [event.to_dict() for event in self.timeline],
+            "sensor_payloads": dict(self.sensor_payloads),
             "source_runs": [source.to_dict() for source in self.source_runs],
             "summary": self.summary.to_dict(),
             "result_sha256": self.result_sha256,
@@ -206,6 +208,7 @@ class DetectiveInvestigator:
             allowed_capabilities=allowed_capabilities,
             event_sink=research_events,
         )
+        sensor_payloads = self._sensor_payloads(research)
         correlated = self.correlation_engine.correlate(research.evidence)
         graph = build_evidence_graph(correlated.findings, correlated.relations)
         timeline = build_timeline(research.evidence)
@@ -287,6 +290,7 @@ class DetectiveInvestigator:
             identity_clusters=identity_clusters,
             graph=graph,
             timeline=timeline,
+            sensor_payloads=sensor_payloads,
             source_runs=source_runs,
             summary=summary,
             result_sha256=result_sha256,
@@ -302,6 +306,16 @@ class DetectiveInvestigator:
             },
         )
         return result
+
+    def _sensor_payloads(self, research: ResearchResult) -> Mapping[str, object]:
+        payloads: dict[str, object] = {}
+        for evidence in research.evidence:
+            if evidence.module != "emailosint.email":
+                continue
+            bundle = evidence.fields.get("bundle")
+            if isinstance(bundle, Mapping):
+                payloads["emailosint"] = dict(bundle)
+        return payloads
 
     def _source_runs(
         self,
