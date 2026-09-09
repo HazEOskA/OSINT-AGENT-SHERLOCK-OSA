@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Mapping
 
 from sherlock_osa.contracts import (
@@ -13,8 +12,11 @@ from sherlock_osa.contracts import (
     require_string,
 )
 from sherlock_osa.emailosint import EmailOsintClient
+from sherlock_osa.emailosint_module import EmailOsintResearchModule
 from sherlock_osa.errors import SherlockError
 from sherlock_osa.investigation import DetectiveInvestigator, InvestigationMode
+from sherlock_osa.planner import AdaptiveSourcePlanner
+from sherlock_osa.reporting import build_human_report
 from sherlock_osa.research import (
     BoundedResearchEngine,
     EventSink,
@@ -66,11 +68,31 @@ def person_username_candidates(value: str) -> tuple[str, ...]:
     return tuple(unique)
 
 
+def normalize_phone(value: str) -> str:
+    raw = value.strip()
+    if raw.startswith("00"):
+        raw = "+" + raw[2:]
+    if not raw.startswith("+"):
+        raise SherlockError(
+            "PHONE_E164_REQUIRED",
+            "Dla numeru telefonu użyj formatu międzynarodowego, np. +31612345678.",
+            status=422,
+        )
+    digits = re.sub(r"\D", "", raw)
+    if not 8 <= len(digits) <= 15 or digits.startswith("0"):
+        raise SherlockError(
+            "INVALID_PHONE",
+            "Niepoprawny numer telefonu.",
+            status=422,
+        )
+    return "+" + digits
+
+
 def detect_search_kind(value: str) -> str:
     candidate = value.strip()
     if re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", candidate):
         return "EMAIL"
-    if re.fullmatch(r"\+?[0-9][0-9\s().-]{6,24}", candidate):
+    if re.fullmatch(r"(?:\+|00)[0-9][0-9\s().-]{6,24}", candidate):
         return "PHONE"
     if candidate.startswith(("http://", "https://")):
         return "URL"
@@ -84,40 +106,105 @@ def detect_search_kind(value: str) -> str:
     return "USERNAME"
 
 
-class ResearchMissionService(MissionService):
-    """MissionService extension: passive research stays bounded and evidence-first."""
+def search_budget(mode: InvestigationMode) -> ResearchBudget:
+    if mode is InvestigationMode.QUICK:
+        return ResearchBudget(
+            hard_timeout_seconds=45.0,
+            per_module_timeout_seconds=12.0,
+            max_depth=2,
+            max_identifiers=64,
+            max_evidence=300,
+            max_module_invocations=300,
+            max_parallel=16,
+            no_progress_rounds=1,
+        )
+    if mode is InvestigationMode.DEEP:
+        return ResearchBudget(
+            hard_timeout_seconds=180.0,
+            per_module_timeout_seconds=40.0,
+            max_depth=4,
+            max_identifiers=256,
+            max_evidence=1200,
+            max_module_invocations=1800,
+            max_parallel=24,
+            no_progress_rounds=2,
+        )
+    return ResearchBudget(
+        hard_timeout_seconds=300.0,
+        per_module_timeout_seconds=55.0,
+        max_depth=6,
+        max_identifiers=768,
+        max_evidence=3000,
+        max_module_invocations=5000,
+        max_parallel=32,
+        no_progress_rounds=3,
+    )
 
-    def __init__(self, *args: Any, research_engine: BoundedResearchEngine | None = None, **kwargs: Any) -> None:
+
+class ResearchMissionService(MissionService):
+    """MissionService extension with bounded passive investigation."""
+
+    def __init__(
+        self,
+        *args: Any,
+        research_engine: BoundedResearchEngine | None = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(*args, **kwargs)
         self.research_engine = research_engine or BoundedResearchEngine(
             modules=(SeedExpansionModule(), *build_source_modules()),
-            budget=ResearchBudget(
-                hard_timeout_seconds=300.0,
-                per_module_timeout_seconds=60.0,
-                max_depth=4,
-                max_identifiers=256,
-                max_evidence=1000,
-                max_module_invocations=1200,
-                max_parallel=24,
-                no_progress_rounds=2,
-            ),
+            budget=search_budget(InvestigationMode.DEEP),
+            planner=AdaptiveSourcePlanner("DEEP"),
+        )
+
+    def _build_search_engine(self, mode: InvestigationMode) -> BoundedResearchEngine:
+        modules = (
+            SeedExpansionModule(),
+            EmailOsintResearchModule(EmailOsintClient.from_settings(self.settings)),
+            *build_source_modules(),
+        )
+        return BoundedResearchEngine(
+            modules=modules,
+            budget=search_budget(mode),
+            planner=AdaptiveSourcePlanner(mode.value.upper()),
         )
 
     def health(self, *, probe_engine: bool = False) -> dict[str, object]:
         base = super().health(probe_engine=probe_engine)
         research = self.research_sources()
-        full_pack = bool(research["all_dependencies_available"]) and bool(research["all_versions_pinned"])
+        full_pack = bool(research["all_dependencies_available"]) and bool(
+            research["all_versions_pinned"]
+        )
+        hibp = next(
+            (
+                source
+                for source in research.get("sources", [])
+                if isinstance(source, Mapping) and source.get("name") == "hibp.account"
+            ),
+            {},
+        )
+        phone_ready = bool(hibp.get("ready"))
         return {
             **base,
             "execution_backing": (
-                "SIMULATION_PLUS_FULL_BOUNDED_PASSIVE_RESEARCH"
+                "SIMULATION_PLUS_MAX_BOUNDED_PASSIVE_RESEARCH"
                 if full_pack
                 else "SIMULATION_PLUS_PARTIAL_BOUNDED_PASSIVE_RESEARCH"
             ),
             "research": research,
             "search": {
-                "supported": ["AUTO", "EMAIL", "USERNAME", "PERSON", "DOMAIN", "URL"],
-                "phone": "UNBACKED",
+                "supported": [
+                    "AUTO",
+                    "EMAIL",
+                    "PHONE",
+                    "USERNAME",
+                    "PERSON",
+                    "DOMAIN",
+                    "URL",
+                ],
+                "phone": "BACKED_HIBP" if phone_ready else "REQUIRES_HIBP_API_KEY",
+                "default_mode": "MAX",
+                "modes": ["QUICK", "DEEP", "MAX"],
                 "presentation": "HUMAN_REPORT_WITH_SOURCE_LINKS",
             },
         }
@@ -132,6 +219,19 @@ class ResearchMissionService(MissionService):
                 "max_depth": self.research_engine.budget.max_depth,
                 "max_identifiers": self.research_engine.budget.max_identifiers,
             },
+            "search_modes": {
+                mode.name: {
+                    "hard_timeout_seconds": search_budget(mode).hard_timeout_seconds,
+                    "per_module_timeout_seconds": search_budget(mode).per_module_timeout_seconds,
+                    "max_depth": search_budget(mode).max_depth,
+                    "max_identifiers": search_budget(mode).max_identifiers,
+                    "max_evidence": search_budget(mode).max_evidence,
+                    "max_module_invocations": search_budget(mode).max_module_invocations,
+                    "max_parallel": search_budget(mode).max_parallel,
+                    "planner": AdaptiveSourcePlanner(mode.value.upper()).describe(),
+                }
+                for mode in InvestigationMode
+            },
             "truth": (
                 "DEPENDENCIES_VERIFIED; live source reachability is evaluated per lookup."
                 if health["all_dependencies_available"] and health["all_versions_pinned"]
@@ -139,9 +239,15 @@ class ResearchMissionService(MissionService):
             ),
         }
 
-    def full_search(self, raw: object) -> dict[str, object]:
+    def full_search(
+        self,
+        raw: object,
+        *,
+        event_sink: EventSink | None = None,
+    ) -> dict[str, object]:
         data = require_mapping(raw, field_name="search")
         query = require_string(data.get("query"), field_name="query", maximum=2048)
+
         requested_kind = require_string(
             data.get("kind", "AUTO"),
             field_name="kind",
@@ -150,24 +256,42 @@ class ResearchMissionService(MissionService):
         if requested_kind not in SEARCH_KINDS:
             raise SherlockError(
                 "INVALID_SEARCH_KIND",
-                "Obsługiwane typy: AUTO, EMAIL, USERNAME, PERSON, DOMAIN, URL.",
+                "Obsługiwane typy: AUTO, EMAIL, PHONE, USERNAME, PERSON, DOMAIN, URL.",
                 status=422,
             )
+
+        raw_mode = require_string(
+            data.get("mode", "MAX"),
+            field_name="mode",
+            maximum=10,
+        ).upper()
+        try:
+            mode = InvestigationMode(raw_mode.casefold())
+        except ValueError as exc:
+            raise SherlockError(
+                "INVALID_SEARCH_MODE",
+                "Tryb musi być QUICK, DEEP albo MAX.",
+                status=422,
+            ) from exc
 
         kind = detect_search_kind(query) if requested_kind == "AUTO" else requested_kind
-        if kind == "PHONE":
-            raise SherlockError(
-                "PHONE_SOURCE_UNAVAILABLE",
-                "Numer telefonu został rozpoznany, ale Sherlock nie ma jeszcze zweryfikowanego źródła PHONE. Nie zwracam udawanego wyniku.",
-                status=422,
-            )
 
         if kind == "PERSON":
-            derived_queries = person_username_candidates(query)
+            candidates = person_username_candidates(query)
+            candidate_limit = {
+                InvestigationMode.QUICK: 4,
+                InvestigationMode.DEEP: 8,
+                InvestigationMode.MAX: len(candidates),
+            }[mode]
+            derived_queries = candidates[:candidate_limit]
             seeds = tuple(
                 ResearchIdentifier(IdentifierKind.USERNAME, candidate)
                 for candidate in derived_queries
             )
+        elif kind == "PHONE":
+            normalized_phone = normalize_phone(query)
+            derived_queries = ()
+            seeds = (ResearchIdentifier(IdentifierKind.PHONE, normalized_phone),)
         else:
             derived_queries = ()
             kind_map = {
@@ -186,60 +310,101 @@ class ResearchMissionService(MissionService):
                 ) from exc
             seeds = (ResearchIdentifier(identifier_kind, query),)
 
+        engine = self._build_search_engine(mode)
         allowed_capabilities = sorted(
             {
                 module.required_capability
-                for module in self.research_engine.modules
+                for module in engine.modules
                 if getattr(module, "required_capability", "")
             }
         )
-        investigator = DetectiveInvestigator(self.research_engine)
+        investigator = DetectiveInvestigator(engine)
 
-        def run_detective():
-            return investigator.investigate(
-                seeds,
-                allowed_capabilities=allowed_capabilities,
-                mode=InvestigationMode.DEEP,
+        if event_sink:
+            event_sink(
+                "search_started",
+                {
+                    "kind": kind,
+                    "mode": mode.name,
+                    "seed_count": len(seeds),
+                },
             )
 
-        email_result: dict[str, object] | None = None
-        email_error: dict[str, object] | None = None
+        investigation = investigator.investigate(
+            seeds,
+            allowed_capabilities=allowed_capabilities,
+            mode=mode,
+            event_sink=event_sink,
+        )
 
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            detective_future = pool.submit(run_detective)
-            email_future = None
-            if kind == "EMAIL":
-                client = EmailOsintClient.from_settings(self.settings)
-                email_future = pool.submit(client.lookup, {"email": query})
+        emailosint = investigation.sensor_payloads.get("emailosint")
+        emailosint_error: dict[str, object] | None = None
+        for run in investigation.source_runs:
+            if run.source == "emailosint.email" and run.status in {"ERROR", "TIMEOUT"}:
+                emailosint_error = {
+                    "code": "EMAILOSINT_SOURCE_ERROR",
+                    "message": (
+                        "EmailOSINT nie odpowiedział w tym przebiegu. "
+                        "Pozostałe źródła zostały przetworzone niezależnie."
+                    ),
+                }
+                break
 
-            detective = detective_future.result()
+        sources = self.research_sources()
+        hibp = next(
+            (
+                source
+                for source in sources.get("sources", [])
+                if isinstance(source, Mapping) and source.get("name") == "hibp.account"
+            ),
+            {},
+        )
 
-            if email_future is not None:
-                try:
-                    email_result = email_future.result()
-                except SherlockError as exc:
-                    email_error = exc.as_dict()["error"]
+        report = build_human_report(
+            query=query,
+            kind=kind,
+            investigation=investigation,
+        )
 
-        return {
+        result = {
             "query": {
                 "requested_kind": requested_kind,
                 "kind": kind,
                 "value": query,
                 "derived_queries": list(derived_queries),
             },
-            "emailosint": email_result,
-            "emailosint_error": email_error,
-            "detective": detective.to_dict(),
-            "sources": self.research_sources(),
+            "mode": mode.name,
+            "report": report,
+            "emailosint": emailosint,
+            "emailosint_error": emailosint_error,
+            "detective": investigation.to_dict(),
+            "sources": sources,
             "truth": {
                 "mode": "BOUNDED_PASSIVE",
+                "search_mode": mode.name,
                 "operator_auth_required": True,
                 "fabricated_results": False,
-                "phone_backing": False,
+                "phone_backing": bool(hibp.get("ready")),
+                "phone_source": "HIBP_ACCOUNT" if bool(hibp.get("ready")) else "UNAVAILABLE_NO_HIBP_KEY",
+                "hard_timeout_seconds": engine.budget.hard_timeout_seconds,
             },
         }
 
-    def _prepare_research(self, raw: object) -> tuple[object, tuple[ResearchIdentifier, ...], bool]:
+        if event_sink:
+            event_sink(
+                "case_report_ready",
+                {
+                    "headline": report["headline"],
+                    "summary": report["summary"],
+                    "mode": mode.name,
+                },
+            )
+        return result
+
+    def _prepare_research(
+        self,
+        raw: object,
+    ) -> tuple[object, tuple[ResearchIdentifier, ...], bool]:
         data = require_mapping(raw, field_name="research")
         mission_id = require_string(data.get("mission_id"), field_name="mission_id", maximum=80)
         purge_after = data.get("purge_after", True)
@@ -282,7 +447,12 @@ class ResearchMissionService(MissionService):
 
         return scope, tuple(seeds), purge_after
 
-    def research(self, raw: object, *, event_sink: EventSink | None = None) -> dict[str, object]:
+    def research(
+        self,
+        raw: object,
+        *,
+        event_sink: EventSink | None = None,
+    ) -> dict[str, object]:
         scope, seeds, purge_after = self._prepare_research(raw)
         result = self.research_engine.run(
             seeds,
@@ -304,7 +474,9 @@ class ResearchMissionService(MissionService):
                 "evidence_count": len(result.evidence),
                 "tainted_evidence": result.tainted_evidence,
                 "result_sha256": result.result_sha256,
-                "seed_set_sha256": sha256_json(sorted(identifier.key for identifier in seeds)),
+                "seed_set_sha256": sha256_json(
+                    sorted(identifier.key for identifier in seeds)
+                ),
             },
         )
 
