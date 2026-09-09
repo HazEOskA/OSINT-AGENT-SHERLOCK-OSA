@@ -24,7 +24,7 @@ ASSETS = {
 
 def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
-        server_version = "SherlockOSA/0.4.0"
+        server_version = "SherlockOSA/0.5.0"
         sys_version = ""
 
         def log_message(self, format_string: str, *args: object) -> None:
@@ -207,6 +207,17 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
                 return
 
             self._require_auth()
+
+            if path == "/api/v1/search":
+                search = getattr(service, "full_search", None)
+                if not callable(search):
+                    raise SherlockError(
+                        "SEARCH_UNAVAILABLE",
+                        "Full Search nie jest podpięty.",
+                        status=503,
+                    )
+                self._json(200, search(self._body_json()))
+                return
             if path == "/api/v1/missions":
                 self._json(201, service.create_mission(self._body_json()))
                 return
