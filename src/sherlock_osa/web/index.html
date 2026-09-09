@@ -4,8 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <meta name="description" content="Sherlock OSA — pełny evidence-first OSINT z twardymi linkami do źródeł.">
-  <title>Sherlock OSA — Full Search</title>
+  <meta
+    name="description"
+    content="Sherlock OSA MAX — wieloźródłowy, evidence-first OSINT z rekurencyjnymi tropami i twardymi linkami do dowodów."
+  >
+  <title>Sherlock OSA — MAX Investigation</title>
   <link rel="stylesheet" href="/assets/styles.css">
 </head>
 <body>
@@ -15,56 +18,90 @@
   <header class="topbar">
     <a class="brand" href="#top" aria-label="Sherlock OSA">
       <span class="brand-mark">S//O</span>
-      <span><strong>SHERLOCK OSA</strong><small>FULL SEARCH // EVIDENCE FIRST</small></span>
+      <span>
+        <strong>SHERLOCK OSA</strong>
+        <small>MAX INVESTIGATION // CLAIM ≠ PROOF</small>
+      </span>
     </a>
     <div class="status-row">
       <span class="pill" id="service-status"><i></i> ŁĄCZENIE</span>
-      <span class="pill accent" id="deployment-mode">DETECTIVE MODE</span>
+      <span class="pill accent" id="deployment-mode">MAX ENGINE</span>
     </div>
   </header>
 
   <main id="top">
-    <section class="hero">
+    <section class="hero hero-max">
       <div class="hero-copy">
-        <p class="eyebrow">FULL SEARCH // PUBLIC-SOURCE INVESTIGATION</p>
-        <h1>Wpisz trop.<br><em>Sherlock szuka szeroko.</em></h1>
+        <p class="eyebrow">MULTI-SOURCE // RECURSIVE // EVIDENCE-FIRST</p>
+        <h1>Jeden trop.<br><em>Całe śledztwo.</em></h1>
         <p class="lead">
-          Email, nick, imię i nazwisko, domena albo URL. Sherlock odpala właściwe źródła,
-          idzie po kolejnych tropach i zwraca normalny raport z linkami do dowodów.
+          Sherlock odpala niezależne źródła, zbiera nowe tropy, idzie po nich dalej,
+          rozdziela fakty od hipotez i kończy dopiero wtedy, gdy nie ma już wartościowych
+          ścieżek w wybranym budżecie.
         </p>
+
         <div class="search-badges" aria-label="Obsługiwane wejścia">
-          <span>EMAIL</span><span>NICK</span><span>IMIĘ + NAZWISKO</span><span>DOMENA</span><span>URL</span>
+          <span>EMAIL</span>
+          <span>PHONE</span>
+          <span>NICK</span>
+          <span>IMIĘ + NAZWISKO</span>
+          <span>DOMENA</span>
+          <span>URL</span>
         </div>
-        <p class="phone-truth">Telefon: brak jeszcze zweryfikowanego adaptera — Sherlock nie udaje wyników.</p>
+
+        <div class="max-principles">
+          <article><strong>FAKT</strong><small>bezpośredni sygnał źródłowy</small></article>
+          <article><strong>POWIĄZANIE</strong><small>kilka zgodnych dowodów</small></article>
+          <article><strong>HIPOTEZA</strong><small>trop wymagający potwierdzenia</small></article>
+        </div>
       </div>
 
-      <form class="lookup-card full-search-card" id="search-form">
+      <form class="lookup-card full-search-card max-intake" id="search-form">
         <div class="lookup-head">
-          <div><span>PRIMARY INTAKE</span><strong>SHERLOCK FULL SEARCH</strong></div>
-          <b>DEEP</b>
+          <div>
+            <span>PRIMARY INTAKE</span>
+            <strong>SHERLOCK MAX</strong>
+          </div>
+          <b id="mode-chip">MAX</b>
         </div>
 
-        <div class="search-grid">
+        <div class="search-grid max-search-grid">
           <label>
-            <span class="input-label">Co wpisujesz?</span>
+            <span class="input-label">Typ tropu</span>
             <select name="kind" id="search-kind">
               <option value="AUTO" selected>AUTO — rozpoznaj sam</option>
               <option value="EMAIL">EMAIL</option>
+              <option value="PHONE">TELEFON</option>
               <option value="USERNAME">NICK / USERNAME</option>
               <option value="PERSON">IMIĘ + NAZWISKO</option>
               <option value="DOMAIN">DOMENA</option>
               <option value="URL">URL</option>
             </select>
           </label>
+
           <label>
+            <span class="input-label">Tryb śledztwa</span>
+            <select name="mode" id="search-mode">
+              <option value="MAX" selected>MAX — wszystko w budżecie</option>
+              <option value="DEEP">DEEP — szeroko i głęboko</option>
+              <option value="QUICK">QUICK — szybki rekonesans</option>
+            </select>
+          </label>
+
+          <label class="query-label">
             <span class="input-label">Trop</span>
-            <input name="query" id="search-query" autocomplete="off"
-              placeholder="email / nick / imię i nazwisko / domena / URL" required>
+            <input
+              name="query"
+              id="search-query"
+              autocomplete="off"
+              placeholder="email / +316… / nick / imię nazwisko / domena / URL"
+              required
+            >
           </label>
         </div>
 
-        <button class="button primary full-search-button" id="search-submit" type="submit">
-          SZUKAJ WSZĘDZIE
+        <button class="button primary full-search-button max-button" id="search-submit" type="submit">
+          URUCHOM SHERLOCK MAX
         </button>
 
         <details class="operator-settings" id="operator-settings">
@@ -74,35 +111,54 @@
         </details>
 
         <p class="form-note" id="search-note">
-          Wynik pokaże fakty, możliwe powiązania i twarde źródła. JSON jest schowany w panelu DEV.
+          MAX ma twardy limit 5 minut na pojedyncze śledztwo. Brak klucza do opcjonalnego
+          źródła nie zatrzymuje pozostałych źródeł.
         </p>
+
+        <section class="live-box" id="live-box" hidden aria-live="polite">
+          <div class="live-head">
+            <div>
+              <span>LIVE INVESTIGATION</span>
+              <strong id="live-status">START</strong>
+            </div>
+            <button type="button" class="ghost-mini" id="clear-feed">WYCZYŚĆ</button>
+          </div>
+          <div class="live-feed" id="live-feed"></div>
+        </section>
       </form>
     </section>
 
-    <section class="signal-bar" aria-label="Silnik">
-      <article><span>EMAIL</span><strong>EMAILOSINT + HOLEHE</strong><small>profile, exposure, konta</small></article>
-      <article><span>USERNAME</span><strong>MAIGRET + PIVOTS</strong><small>profile i kolejne tropy</small></article>
-      <article><span>WEB</span><strong>WAYBACK + CT</strong><small>archiwa, domeny, certyfikaty</small></article>
-      <article><span>TRUTH</span><strong>LINK OR UNKNOWN</strong><small>brak dowodu = brak pewnika</small></article>
+    <section class="signal-bar max-signal-bar" aria-label="Silnik">
+      <article><span>IDENTITY</span><strong>EMAILOSINT + GRAVATAR</strong><small>profil, konta, exposure</small></article>
+      <article><span>CODE</span><strong>GITHUB + GITLAB</strong><small>publiczne profile i linki</small></article>
+      <article><span>USERNAME</span><strong>MAIGRET + HOLEHE</strong><small>enumeracja i pivots</small></article>
+      <article><span>DOMAIN</span><strong>RDAP + CT</strong><small>rejestracja i certyfikaty</small></article>
+      <article><span>ARCHIVE</span><strong>WAYBACK + COMMON CRAWL</strong><small>historyczny footprint</small></article>
+      <article><span>EXPOSURE</span><strong>HIBP OPTIONAL</strong><small>email / telefon z kluczem</small></article>
     </section>
 
-    <section class="results" id="result" hidden>
+    <section class="results max-results" id="result" hidden>
       <div class="section-head">
         <div>
           <p class="eyebrow">CASE REPORT</p>
           <h2 id="result-title">Wynik śledztwa</h2>
+          <p class="case-headline" id="report-headline"></p>
         </div>
         <span class="risk-badge" id="risk-badge">REPORT</span>
       </div>
 
-      <div class="summary-grid full-summary-grid">
-        <article class="summary-card wide">
-          <span>PODSUMOWANIE</span>
-          <p id="case-summary">Sherlock zakończył analizę.</p>
-        </article>
-        <article class="summary-card"><span>ŹRÓDŁA</span><strong id="source-count">0</strong></article>
+      <article class="case-summary-card">
+        <span>MÓWIĄC NORMALNIE</span>
+        <p id="case-summary">Sherlock zakończył analizę.</p>
+      </article>
+
+      <div class="summary-grid max-summary-grid">
+        <article class="summary-card"><span>ŹRÓDŁA SPRAWDZONE</span><strong id="source-count">0</strong></article>
         <article class="summary-card"><span>USTALENIA</span><strong id="finding-count">0</strong></article>
+        <article class="summary-card"><span>POTWIERDZONE</span><strong id="confirmed-count">0</strong></article>
         <article class="summary-card"><span>LINKI / DOWODY</span><strong id="link-count">0</strong></article>
+        <article class="summary-card"><span>TROPY</span><strong id="identifier-count">0</strong></article>
+        <article class="summary-card"><span>CZAS</span><strong id="duration-count">0s</strong></article>
       </div>
 
       <section class="report-section" id="emailosint-section" hidden>
@@ -116,18 +172,64 @@
           <article><span>INFOSTEALER</span><strong id="stealer-count">0</strong></article>
         </div>
         <div class="report-grid">
-          <section class="report-panel"><div class="panel-title"><span>01</span><h3>Powiązane konta</h3></div><div class="item-list" id="accounts-list"></div></section>
-          <section class="report-panel"><div class="panel-title"><span>02</span><h3>Wycieki</h3></div><div class="item-list" id="breaches-list"></div></section>
-          <section class="report-panel"><div class="panel-title"><span>03</span><h3>Infostealer</h3></div><div class="item-list" id="stealer-list"></div></section>
+          <section class="report-panel">
+            <div class="panel-title"><span>01</span><h3>Powiązane konta</h3></div>
+            <div class="item-list" id="accounts-list"></div>
+          </section>
+          <section class="report-panel">
+            <div class="panel-title"><span>02</span><h3>Wycieki</h3></div>
+            <div class="item-list" id="breaches-list"></div>
+          </section>
+          <section class="report-panel">
+            <div class="panel-title"><span>03</span><h3>Infostealer</h3></div>
+            <div class="item-list" id="stealer-list"></div>
+          </section>
         </div>
       </section>
 
       <section class="report-section">
         <div class="report-section-head">
-          <div><span>DETECTIVE CORE</span><h3>Ustalenia i dowody</h3></div>
+          <div><span>DETECTIVE CORE</span><h3>Ustalenia i twarde dowody</h3></div>
           <small id="detective-status">GOTOWE</small>
         </div>
         <div class="findings-list" id="findings-list"></div>
+      </section>
+
+      <section class="report-section" id="identity-section">
+        <div class="report-section-head">
+          <div><span>IDENTITY RESOLUTION</span><h3>Powiązania tożsamości</h3></div>
+          <small id="identity-count">0 KLASTRÓW</small>
+        </div>
+        <div class="identity-list" id="identity-list"></div>
+      </section>
+
+      <section class="report-section" id="timeline-section">
+        <div class="report-section-head">
+          <div><span>TIMELINE</span><h3>Oś czasu footprintu</h3></div>
+          <small id="timeline-count">0 ZDARZEŃ</small>
+        </div>
+        <div class="timeline-list" id="timeline-list"></div>
+      </section>
+
+      <section class="report-section">
+        <div class="report-section-head">
+          <div><span>SOURCE OBSERVABILITY</span><h3>Co naprawdę odpowiedziało</h3></div>
+          <small id="source-run-count">0 ŹRÓDEŁ</small>
+        </div>
+        <div class="source-runs" id="source-runs"></div>
+      </section>
+
+      <section class="report-section graph-section">
+        <div class="report-section-head">
+          <div><span>EVIDENCE GRAPH V2</span><h3>Graf dowodów</h3></div>
+          <small id="graph-summary">0 NODES / 0 EDGES</small>
+        </div>
+        <div class="graph-explainer">
+          <p>
+            Sherlock trzyma osobno ustalenia, dowody i relacje. Dzięki temu bezpośredni
+            fakt ze źródła nie jest automatycznie równy tezie „to ta sama osoba”.
+          </p>
+        </div>
       </section>
 
       <section class="report-section warnings-section" id="warnings-section" hidden>
@@ -145,8 +247,8 @@
   </main>
 
   <footer>
-    <span>SHERLOCK OSA // FULL SEARCH</span>
-    <span>CLAIM ≠ PROOF</span>
+    <span>SHERLOCK OSA // MAX INVESTIGATION</span>
+    <span>PUBLIC SOURCES // EVIDENCE FIRST</span>
   </footer>
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
