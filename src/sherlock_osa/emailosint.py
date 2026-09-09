@@ -10,7 +10,7 @@ from typing import Any, Mapping
 from sherlock_osa.errors import SherlockError
 
 
-DEFAULT_EMAILOSINT_ENDPOINT = "https://www.emailosint.org/v1/lookup/email"
+DEFAULT_EMAILOSINT_ENDPOINT = "https://api.emailosint.org/v1/lookup/email"
 EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 SENSITIVE_KEY_PARTS = (
     "password",
@@ -79,7 +79,7 @@ def _text(value: Any) -> str | None:
         stripped = value.strip()
         return stripped or None
     if isinstance(value, Mapping):
-        for key in ("summary", "text", "message", "reason", "description"):
+        for key in ("summary", "headline", "text", "message", "reason", "description"):
             item = value.get(key)
             if isinstance(item, str) and item.strip():
                 return item.strip()
@@ -235,17 +235,21 @@ def _normalise(email: str, provider: Any) -> dict[str, Any]:
         else:
             risk_level = "low"
 
+    linked_safe = _redact(linked)
+    breaches_safe = _redact(breaches)
+    stealer_safe = _redact(stealer)
+
     return {
         "engine": "EMAILOSINT",
         "query": {"type": "EMAIL", "value": email},
         "identity": {
             "summary": summary,
-            "linked_accounts": linked,
+            "linked_accounts": linked_safe,
         },
         "exposure": {
-            "linked_accounts": linked,
-            "breaches": breaches,
-            "infostealer": stealer,
+            "linked_accounts": linked_safe,
+            "breaches": breaches_safe,
+            "infostealer": stealer_safe,
             "counts": {
                 "linked_accounts": len(linked),
                 "breaches": len(breaches),
