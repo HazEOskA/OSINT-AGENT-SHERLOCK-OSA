@@ -60,9 +60,10 @@ def main() -> int:
     parser = UiContractParser()
     parser.feed((SRC / "sherlock_osa" / "web" / "index.html").read_text(encoding="utf-8"))
     required_ids = {
-        "lookup-form",
-        "lookup-email",
-        "lookup-submit",
+        "search-form",
+        "search-kind",
+        "search-query",
+        "search-submit",
         "api-key",
         "deployment-mode",
         "result",
@@ -70,7 +71,7 @@ def main() -> int:
         "accounts-list",
         "breaches-list",
         "stealer-list",
-        "actions-list",
+        "findings-list",
         "result-json",
     }
     checks.append(("ui_required_elements", required_ids <= parser.ids))
@@ -79,7 +80,7 @@ def main() -> int:
     styles = (SRC / "sherlock_osa" / "web" / "styles.css").read_text(encoding="utf-8")
     javascript_source = (SRC / "sherlock_osa" / "web" / "app.js").read_text(encoding="utf-8")
     checks.append(("ui_hidden_contract", "[hidden] { display: none !important; }" in styles))
-    checks.append(("ui_primary_lookup_route", '"/api/v1/lookup/email"' in javascript_source))
+    checks.append(("ui_primary_lookup_route", '"/api/v1/search"' in javascript_source))
 
     node = shutil.which("node")
     if node:
