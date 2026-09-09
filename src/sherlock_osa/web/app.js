@@ -6,6 +6,33 @@ const state = {
   deploymentMode: "UNKNOWN",
 };
 
+const OPERATOR_KEY_STORAGE = "sherlock_api_key";
+
+function setOperatorAuthState(authorized) {
+  const settings = $("#operator-settings");
+  const summary = settings?.querySelector("summary");
+  const input = $("#api-key");
+  const label = settings?.querySelector('label[for="api-key"]');
+
+  if (!settings || !summary || !input || !label) return;
+
+  settings.dataset.authorized = authorized ? "true" : "false";
+  summary.textContent = authorized ? "OPERATOR AUTH ✓" : "Ustawienia operatora";
+  input.hidden = authorized;
+  label.hidden = authorized;
+
+  if (authorized) settings.open = false;
+}
+
+function rememberOperatorToken(token) {
+  const value = String(token || "").trim();
+  if (!value) return;
+  localStorage.setItem(OPERATOR_KEY_STORAGE, value);
+  const input = $("#api-key");
+  if (input) input.value = value;
+  setOperatorAuthState(true);
+}
+
 function toast(message, error = false) {
   const element = $("#toast");
   element.textContent = message;
@@ -16,9 +43,7 @@ function toast(message, error = false) {
 
 function operatorToken() {
   const input = $("#api-key");
-  const value = input?.value.trim() || sessionStorage.getItem("sherlock_api_key") || "";
-  if (value) sessionStorage.setItem("sherlock_api_key", value);
-  return value;
+  return input?.value.trim() || localStorage.getItem(OPERATOR_KEY_STORAGE) || "";
 }
 
 async function requestJson(path, options = {}, withAuth = false) {
@@ -185,6 +210,7 @@ async function runLookup(event) {
         { method: "POST", body: JSON.stringify(payload) },
         true,
       );
+      rememberOperatorToken(token);
     }
 
     renderResult(result);
@@ -202,8 +228,13 @@ async function runLookup(event) {
 async function bootstrap() {
   $("#lookup-form").addEventListener("submit", runLookup);
 
-  const saved = sessionStorage.getItem("sherlock_api_key");
-  if (saved) $("#api-key").value = saved;
+  const saved = localStorage.getItem(OPERATOR_KEY_STORAGE);
+  if (saved) {
+    $("#api-key").value = saved;
+    setOperatorAuthState(true);
+  } else {
+    setOperatorAuthState(false);
+  }
 
   try {
     const health = await requestJson("/api/v1/health", {}, false);
