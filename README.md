@@ -136,3 +136,55 @@ Sherlock does not fabricate a replacement result when the provider fails.
 - raw provider data exposed to the UI is recursively redacted for credential-like fields
 
 The landing reports only what the provider returned plus deterministic privacy actions derived from the presence of account/breach/infostealer signals.
+
+## Sherlock MAX V2
+
+Primary investigation flow:
+
+**TROP → SOURCE MESH → PIVOTS → CORRELATION → IDENTITY RESOLUTION → EVIDENCE GRAPH → TIMELINE → CASE REPORT**
+
+The primary UI accepts `AUTO`, `EMAIL`, `PHONE`, `USERNAME`, `PERSON`, `DOMAIN`, and `URL` and exposes `QUICK`, `DEEP`, and `MAX` investigation modes. `MAX` is the default.
+
+Current source registry includes EmailOSINT, Holehe, Gravatar, Maigret, GitHub, GitLab, RDAP, crt.sh, Internet Archive CDX, Common Crawl Index, and optional keyed Have I Been Pwned account exposure.
+
+Mode budgets remain bounded:
+
+| Mode | Hard timeout | Max depth | Max identifiers | Max evidence | Max module invocations |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| QUICK | 45 s | 2 | 64 | 300 | 300 |
+| DEEP | 180 s | 4 | 256 | 1200 | 1800 |
+| MAX | 300 s | 6 | 768 | 3000 | 5000 |
+
+Streaming primary route:
+
+```text
+POST /api/v1/search/stream
+Authorization: Bearer <SHERLOCK_API_KEY>
+Content-Type: application/json
+Accept: text/event-stream
+```
+
+Synchronous compatibility route: `POST /api/v1/search`.
+
+Example request:
+
+```json
+{"kind":"AUTO","mode":"MAX","query":"example.com"}
+```
+
+Optional MAX source credentials:
+
+```bash
+HIBP_API_KEY=
+GRAVATAR_API_KEY=
+GITHUB_TOKEN=
+GITLAB_TOKEN=
+```
+
+`HIBP_API_KEY` gates HIBP exposure and PHONE-backed lookup. Without it, a phone number is still recognized and normalized but HIBP is reported as `SKIPPED / MISSING_CREDENTIAL`; Sherlock does not invent phone enrichment. International numbers must use `+<country-code>...` (or `00...`, which is normalized to `+...`).
+
+Source observability emits source start/completion/skip/timeout/error/rate-limit events, pivot discovery, evidence collection/blocking, finding confirmation, conflict detection, identity-resolution completion, timeline completion, and final case-report readiness.
+
+Evidence policy: direct source facts are distinct from identity claims; username/name similarity alone never merges identities. Missing credentials, provider errors, timeouts, and rate limits remain explicit. Raw machine data is relegated to the DEV panel; the primary UI renders a plain-language report with hard public source links where available.
+
+A green repository CI proves code and container contracts. Live third-party reachability remains a runtime property and is reported per source.
