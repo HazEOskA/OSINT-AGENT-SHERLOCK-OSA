@@ -19,6 +19,7 @@ from sherlock_osa.errors import SherlockError
 
 class IdentifierKind(StrEnum):
     EMAIL = "EMAIL"
+    PHONE = "PHONE"
     USERNAME = "USERNAME"
     URL = "URL"
     DOMAIN = "DOMAIN"
@@ -273,10 +274,12 @@ class BoundedResearchEngine:
         *,
         budget: ResearchBudget | None = None,
         poison_checker: PoisonChecker | None = None,
+        planner: object | None = None,
     ) -> None:
         self.modules = tuple(modules or (SeedExpansionModule(),))
         self.budget = budget or ResearchBudget()
         self.poison_checker = poison_checker or PoisonChecker()
+        self.planner = planner
 
     def run(
         self,
@@ -377,16 +380,57 @@ class BoundedResearchEngine:
             if current_depth > self.budget.max_depth:
                 continue
 
-            scheduled: list[Awaitable[tuple[ResearchModule, ResearchIdentifier, ModuleResult | Exception]]] = []
+            scheduled: list[
+                Awaitable[
+                    tuple[
+                        ResearchModule,
+                        ResearchIdentifier,
+                        ModuleResult | Exception,
+                        int,
+                    ]
+                ]
+            ] = []
             for identifier in batch:
-                for module in self.modules:
-                    if identifier.kind not in module.supported_kinds:
-                        continue
-                    if module.required_capability not in context.allowed_capabilities:
-                        continue
+                compatible = [
+                    module
+                    for module in self.modules
+                    if identifier.kind in module.supported_kinds
+                    and module.required_capability in context.allowed_capabilities
+                ]
+
+                planned = tuple(compatible)
+                if self.planner is not None:
+                    planned, decisions = self.planner.plan(compatible, identifier)
+                    for decision in decisions:
+                        if decision.run:
+                            continue
+                        emit(
+                            "source_skipped",
+                            {
+                                "research_id": research_id,
+                                "module": decision.source,
+                                "identifier_kind": identifier.kind.value,
+                                "identifier_depth": identifier.depth,
+                                "reason": decision.reason,
+                                "priority": decision.priority,
+                            },
+                        )
+
+                for module in planned:
                     if invocations >= self.budget.max_module_invocations:
                         break
                     invocations += 1
+                    descriptor = getattr(module, "descriptor", None)
+                    emit(
+                        "source_started",
+                        {
+                            "research_id": research_id,
+                            "module": module.name,
+                            "family": getattr(descriptor, "family", "LOCAL"),
+                            "identifier_kind": identifier.kind.value,
+                            "identifier_depth": identifier.depth,
+                        },
+                    )
                     scheduled.append(self._invoke(module, identifier, context, semaphore))
 
             if not scheduled:
@@ -397,21 +441,53 @@ class BoundedResearchEngine:
 
             new_pivots = 0
             for completed in asyncio.as_completed(scheduled):
-                module, identifier, outcome = await completed
+                module, identifier, outcome, duration_ms = await completed
+                descriptor = getattr(module, "descriptor", None)
                 if isinstance(outcome, Exception):
+                    payload = {
+                        "research_id": research_id,
+                        "module": module.name,
+                        "family": getattr(descriptor, "family", "LOCAL"),
+                        "identifier_kind": identifier.kind.value,
+                        "identifier_depth": identifier.depth,
+                        "error": type(outcome).__name__,
+                        "duration_ms": duration_ms,
+                    }
+                    emit("module_error", payload)
                     emit(
-                        "module_error",
-                        {
-                            "research_id": research_id,
-                            "module": module.name,
-                            "identifier_kind": identifier.kind.value,
-                            "error": type(outcome).__name__,
-                        },
+                        "source_timeout" if isinstance(outcome, TimeoutError) else "source_error",
+                        payload,
                     )
                     continue
+
                 item = self._evidence_from_result(module, identifier, outcome)
                 evidence.append(item)
                 emit("identifier_result", item.to_dict())
+                emit(
+                    "source_completed",
+                    {
+                        "research_id": research_id,
+                        "module": module.name,
+                        "family": getattr(descriptor, "family", "LOCAL"),
+                        "identifier_kind": identifier.kind.value,
+                        "identifier_depth": identifier.depth,
+                        "duration_ms": duration_ms,
+                        "source_url_count": len(outcome.source_urls),
+                        "pivot_count": len(outcome.pivots),
+                        "confidence": item.confidence,
+                    },
+                )
+                rate_limited_count = item.fields.get("rate_limited_count", 0)
+                if isinstance(rate_limited_count, int) and rate_limited_count > 0:
+                    emit(
+                        "source_rate_limited",
+                        {
+                            "research_id": research_id,
+                            "module": module.name,
+                            "family": getattr(descriptor, "family", "LOCAL"),
+                            "count": rate_limited_count,
+                        },
+                    )
 
                 if item.trust is TrustState.TAINTED:
                     emit(
@@ -468,16 +544,17 @@ class BoundedResearchEngine:
         identifier: ResearchIdentifier,
         context: ModuleContext,
         semaphore: asyncio.Semaphore,
-    ) -> tuple[ResearchModule, ResearchIdentifier, ModuleResult | Exception]:
+    ) -> tuple[ResearchModule, ResearchIdentifier, ModuleResult | Exception, int]:
+        started = time.monotonic()
         async with semaphore:
             timeout = min(self.budget.per_module_timeout_seconds, context.remaining_seconds)
             if timeout <= 0:
-                return module, identifier, TimeoutError()
+                return module, identifier, TimeoutError(), 0
             try:
                 result = await asyncio.wait_for(module.lookup(identifier, context), timeout=timeout)
-                return module, identifier, result
+                return module, identifier, result, int((time.monotonic() - started) * 1000)
             except Exception as exc:  # module failures are isolated evidence, not engine crashes
-                return module, identifier, exc
+                return module, identifier, exc, int((time.monotonic() - started) * 1000)
 
     def _evidence_from_result(
         self,
@@ -519,6 +596,22 @@ class BoundedResearchEngine:
             value = value.casefold()
             if len(value) > 320 or value.count("@") != 1:
                 raise SherlockError("INVALID_RESEARCH_IDENTIFIER", "Niepoprawny EMAIL research seed.")
+        elif identifier.kind is IdentifierKind.PHONE:
+            raw = value
+            if raw.startswith("00"):
+                raw = "+" + raw[2:]
+            if not raw.startswith("+"):
+                raise SherlockError(
+                    "INVALID_RESEARCH_IDENTIFIER",
+                    "PHONE research seed wymaga numeru międzynarodowego z prefiksem +.",
+                )
+            digits = re.sub(r"\D", "", raw)
+            if not 8 <= len(digits) <= 15:
+                raise SherlockError(
+                    "INVALID_RESEARCH_IDENTIFIER",
+                    "Niepoprawny PHONE research seed.",
+                )
+            value = "+" + digits
         elif identifier.kind is IdentifierKind.DOMAIN:
             value = value.rstrip(".").casefold()
             if not value or len(value) > 253:
