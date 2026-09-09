@@ -390,7 +390,7 @@ function renderFindings(findings) {
     meta.textContent =
       "Niezależne źródła: " +
       String(finding.source_count || 0) +
-      " · confidence: " +
+      " · pewność dowodowa: " +
       String(Math.round(Number(finding.confidence || 0) * 100)) +
       "%";
 
@@ -654,6 +654,55 @@ function renderSourceRuns(runs) {
   }
 }
 
+function renderGraph(graph) {
+  const container = $("#graph-list");
+  if (!container) return;
+  container.replaceChildren();
+
+  const nodes = new Map(((graph && graph.nodes) || []).map((node) => [node.node_id, node]));
+  const edges = (graph && graph.edges) || [];
+
+  if (!edges.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-item";
+    empty.textContent = "Brak relacji grafu do pokazania.";
+    container.append(empty);
+    return;
+  }
+
+  for (const edge of edges.slice(0, 80)) {
+    const left = nodes.get(edge.from_node_id);
+    const right = nodes.get(edge.to_node_id);
+    const article = document.createElement("article");
+    article.className = "graph-edge";
+
+    const relation = document.createElement("b");
+    relation.textContent =
+      edge.edge_type === "SUPPORTED_BY"
+        ? "WSPIERANE PRZEZ"
+        : edge.edge_type === "PIVOT"
+          ? "NOWY TROP Z"
+          : "POWIĄZANIE";
+
+    const path = document.createElement("p");
+    const leftLabel = left ? (left.label || left.kind) : edge.from_node_id;
+    const rightLabel = right ? (right.label || right.source || right.kind) : edge.to_node_id;
+    path.textContent = leftLabel + " → " + rightLabel;
+
+    article.append(relation, path);
+
+    if (right && right.url) {
+      const link = document.createElement("a");
+      link.href = right.url;
+      link.target = "_blank";
+      link.rel = "noreferrer noopener";
+      link.textContent = "↗ dowód";
+      article.append(link);
+    }
+    container.append(article);
+  }
+}
+
 function renderWarnings(bundle) {
   const warnings = [];
 
@@ -719,6 +768,7 @@ function renderResult(bundle) {
   renderWarnings(bundle);
 
   const graph = detective.graph || {};
+  renderGraph(graph);
   $("#graph-summary").textContent =
     String(graph.node_count || 0) +
     " NODES / " +
