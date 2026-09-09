@@ -19,7 +19,7 @@ The older OSA Execution Force mission runtime remains available as a secondary c
 Backend adapter:
 
 - endpoint: `EMAILOSINT_ENDPOINT`
-- default: `https://www.emailosint.org/v1/lookup/email`
+- default: `https://api.emailosint.org/v1/lookup/email`
 - optional provider key: `EMAILOSINT_API_KEY`
 - configurable auth header/scheme
 - JSON and SSE provider responses accepted
@@ -83,7 +83,7 @@ OSA_ACTIONS_API_KEY=...
 Primary provider:
 
 ```bash
-EMAILOSINT_ENDPOINT=https://www.emailosint.org/v1/lookup/email
+EMAILOSINT_ENDPOINT=https://api.emailosint.org/v1/lookup/email
 EMAILOSINT_API_KEY=
 EMAILOSINT_AUTH_HEADER=Authorization
 EMAILOSINT_AUTH_SCHEME=Bearer
