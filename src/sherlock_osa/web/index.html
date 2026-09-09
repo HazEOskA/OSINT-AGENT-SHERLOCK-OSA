@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <meta name="description" content="Sherlock OSA — prywatnościowy self-OSINT: identity, exposure, risk, removal, verification.">
-  <title>Sherlock OSA — sprawdź swój cyfrowy ślad</title>
+  <meta name="description" content="Sherlock OSA — pełny evidence-first OSINT z twardymi linkami do źródeł.">
+  <title>Sherlock OSA — Full Search</title>
   <link rel="stylesheet" href="/assets/styles.css">
 </head>
 <body>
@@ -15,162 +15,138 @@
   <header class="topbar">
     <a class="brand" href="#top" aria-label="Sherlock OSA">
       <span class="brand-mark">S//O</span>
-      <span>
-        <strong>SHERLOCK OSA</strong>
-        <small>DIGITAL FOOTPRINT CONTROL</small>
-      </span>
+      <span><strong>SHERLOCK OSA</strong><small>FULL SEARCH // EVIDENCE FIRST</small></span>
     </a>
     <div class="status-row">
       <span class="pill" id="service-status"><i></i> ŁĄCZENIE</span>
-      <span class="pill accent" id="deployment-mode">PRIVACY CENTER</span>
+      <span class="pill accent" id="deployment-mode">DETECTIVE MODE</span>
     </div>
   </header>
 
   <main id="top">
     <section class="hero">
       <div class="hero-copy">
-        <p class="eyebrow">SELF-OSINT // PRIVACY CONTROL CENTER</p>
-        <h1>Sprawdź, co internet<br><em>wie o Tobie.</em></h1>
+        <p class="eyebrow">FULL SEARCH // PUBLIC-SOURCE INVESTIGATION</p>
+        <h1>Wpisz trop.<br><em>Sherlock szuka szeroko.</em></h1>
         <p class="lead">
-          Jeden email uruchamia właściwy lookup engine. Sherlock porządkuje wynik w pięciu
-          warstwach: tożsamość, ekspozycja, ryzyko, usuwanie i ponowna weryfikacja.
+          Email, nick, imię i nazwisko, domena albo URL. Sherlock odpala właściwe źródła,
+          idzie po kolejnych tropach i zwraca normalny raport z linkami do dowodów.
         </p>
-
-        <div class="flow-strip" aria-label="Przepływ produktu">
-          <span class="active">01 IDENTITY</span>
-          <span>02 EXPOSURE</span>
-          <span>03 RISK</span>
-          <span>04 REMOVAL</span>
-          <span>05 VERIFICATION</span>
+        <div class="search-badges" aria-label="Obsługiwane wejścia">
+          <span>EMAIL</span><span>NICK</span><span>IMIĘ + NAZWISKO</span><span>DOMENA</span><span>URL</span>
         </div>
+        <p class="phone-truth">Telefon: brak jeszcze zweryfikowanego adaptera — Sherlock nie udaje wyników.</p>
       </div>
 
-      <form class="lookup-card" id="lookup-form">
+      <form class="lookup-card full-search-card" id="search-form">
         <div class="lookup-head">
-          <div>
-            <span>PRIMARY ENGINE</span>
-            <strong>EMAIL INTELLIGENCE</strong>
-          </div>
-          <b>EMAILOSINT</b>
+          <div><span>PRIMARY INTAKE</span><strong>SHERLOCK FULL SEARCH</strong></div>
+          <b>DEEP</b>
         </div>
 
-        <label class="input-label" for="lookup-email">Twój email</label>
-        <div class="lookup-row">
-          <input
-            id="lookup-email"
-            name="email"
-            type="email"
-            autocomplete="email"
-            placeholder="name@example.com"
-            required
-          >
-          <button class="button primary" id="lookup-submit" type="submit">SPRAWDŹ ŚLAD</button>
+        <div class="search-grid">
+          <label>
+            <span class="input-label">Co wpisujesz?</span>
+            <select name="kind" id="search-kind">
+              <option value="AUTO" selected>AUTO — rozpoznaj sam</option>
+              <option value="EMAIL">EMAIL</option>
+              <option value="USERNAME">NICK / USERNAME</option>
+              <option value="PERSON">IMIĘ + NAZWISKO</option>
+              <option value="DOMAIN">DOMENA</option>
+              <option value="URL">URL</option>
+            </select>
+          </label>
+          <label>
+            <span class="input-label">Trop</span>
+            <input name="query" id="search-query" autocomplete="off"
+              placeholder="email / nick / imię i nazwisko / domena / URL" required>
+          </label>
         </div>
+
+        <button class="button primary full-search-button" id="search-submit" type="submit">
+          SZUKAJ WSZĘDZIE
+        </button>
 
         <details class="operator-settings" id="operator-settings">
           <summary>Ustawienia operatora</summary>
-          <label for="api-key">Sherlock API key — potrzebny tylko, gdy backend używa prywatnego klucza providera</label>
-          <input id="api-key" type="password" autocomplete="off" placeholder="opcjonalnie">
+          <label for="api-key">Sherlock API key</label>
+          <input id="api-key" type="password" autocomplete="off" placeholder="SHERLOCK_API_KEY">
         </details>
 
-        <p class="form-note" id="lookup-note">
-          Lookup korzysta z backendowego adaptera. Klucz providera nigdy nie trafia do przeglądarki.
+        <p class="form-note" id="search-note">
+          Wynik pokaże fakty, możliwe powiązania i twarde źródła. JSON jest schowany w panelu DEV.
         </p>
       </form>
     </section>
 
     <section class="signal-bar" aria-label="Silnik">
-      <article><span>IDENTITY</span><strong>100+ SOURCES</strong><small>linked accounts</small></article>
-      <article><span>EXPOSURE</span><strong>BREACH DATA</strong><small>publiczne sygnały wycieków</small></article>
-      <article><span>RISK</span><strong>INFOSTEALER</strong><small>sygnały przejęcia danych</small></article>
-      <article><span>ANALYST</span><strong>AI SUMMARY</strong><small>synteza nad wynikami</small></article>
+      <article><span>EMAIL</span><strong>EMAILOSINT + HOLEHE</strong><small>profile, exposure, konta</small></article>
+      <article><span>USERNAME</span><strong>MAIGRET + PIVOTS</strong><small>profile i kolejne tropy</small></article>
+      <article><span>WEB</span><strong>WAYBACK + CT</strong><small>archiwa, domeny, certyfikaty</small></article>
+      <article><span>TRUTH</span><strong>LINK OR UNKNOWN</strong><small>brak dowodu = brak pewnika</small></article>
     </section>
 
     <section class="results" id="result" hidden>
       <div class="section-head">
         <div>
-          <p class="eyebrow">FOOTPRINT REPORT</p>
-          <h2 id="result-title">Twój cyfrowy ślad</h2>
+          <p class="eyebrow">CASE REPORT</p>
+          <h2 id="result-title">Wynik śledztwa</h2>
         </div>
-        <span class="risk-badge" id="risk-badge">UNKNOWN</span>
+        <span class="risk-badge" id="risk-badge">REPORT</span>
       </div>
 
-      <div class="summary-grid">
+      <div class="summary-grid full-summary-grid">
         <article class="summary-card wide">
-          <span>AI SYNTHESIS</span>
-          <p id="ai-summary">Brak podsumowania.</p>
+          <span>PODSUMOWANIE</span>
+          <p id="case-summary">Sherlock zakończył analizę.</p>
         </article>
-        <article class="summary-card">
-          <span>LINKED ACCOUNTS</span>
-          <strong id="accounts-count">0</strong>
-        </article>
-        <article class="summary-card">
-          <span>BREACHES</span>
-          <strong id="breaches-count">0</strong>
-        </article>
-        <article class="summary-card">
-          <span>INFOSTEALER</span>
-          <strong id="stealer-count">0</strong>
-        </article>
+        <article class="summary-card"><span>ŹRÓDŁA</span><strong id="source-count">0</strong></article>
+        <article class="summary-card"><span>USTALENIA</span><strong id="finding-count">0</strong></article>
+        <article class="summary-card"><span>LINKI / DOWODY</span><strong id="link-count">0</strong></article>
       </div>
 
-      <div class="report-grid">
-        <section class="report-panel">
-          <div class="panel-title"><span>01</span><h3>Identity</h3></div>
-          <div class="item-list" id="accounts-list"></div>
-        </section>
+      <section class="report-section" id="emailosint-section" hidden>
+        <div class="report-section-head">
+          <div><span>EMAIL INTELLIGENCE</span><h3>EmailOSINT</h3></div>
+          <small id="emailosint-status">OK</small>
+        </div>
+        <div class="email-stats">
+          <article><span>KONTA</span><strong id="accounts-count">0</strong></article>
+          <article><span>WYCIEKI</span><strong id="breaches-count">0</strong></article>
+          <article><span>INFOSTEALER</span><strong id="stealer-count">0</strong></article>
+        </div>
+        <div class="report-grid">
+          <section class="report-panel"><div class="panel-title"><span>01</span><h3>Powiązane konta</h3></div><div class="item-list" id="accounts-list"></div></section>
+          <section class="report-panel"><div class="panel-title"><span>02</span><h3>Wycieki</h3></div><div class="item-list" id="breaches-list"></div></section>
+          <section class="report-panel"><div class="panel-title"><span>03</span><h3>Infostealer</h3></div><div class="item-list" id="stealer-list"></div></section>
+        </div>
+      </section>
 
-        <section class="report-panel">
-          <div class="panel-title"><span>02</span><h3>Exposure</h3></div>
-          <div class="subhead">BREACHES</div>
-          <div class="item-list" id="breaches-list"></div>
-          <div class="subhead">INFOSTEALER</div>
-          <div class="item-list" id="stealer-list"></div>
-        </section>
+      <section class="report-section">
+        <div class="report-section-head">
+          <div><span>DETECTIVE CORE</span><h3>Ustalenia i dowody</h3></div>
+          <small id="detective-status">GOTOWE</small>
+        </div>
+        <div class="findings-list" id="findings-list"></div>
+      </section>
 
-        <section class="report-panel action-panel">
-          <div class="panel-title"><span>03–05</span><h3>Risk → Removal → Verification</h3></div>
-          <div class="action-list" id="actions-list"></div>
-        </section>
-      </div>
+      <section class="report-section warnings-section" id="warnings-section" hidden>
+        <div class="report-section-head">
+          <div><span>UWAGA</span><h3>Czego nie udało się potwierdzić</h3></div>
+        </div>
+        <div class="item-list" id="warnings-list"></div>
+      </section>
 
       <details class="raw-result">
-        <summary>Surowy, zredagowany wynik providera</summary>
+        <summary>DEV // RAW DATA</summary>
         <pre><code id="result-json"></code></pre>
       </details>
-    </section>
-
-    <section class="product-section">
-      <div class="section-head">
-        <div>
-          <p class="eyebrow">ARCHITECTURE</p>
-          <h2>Engine najpierw. Warstwy później.</h2>
-        </div>
-      </div>
-
-      <div class="layer-grid">
-        <article>
-          <b>LAYER 1</b>
-          <h3>EmailOSINT adapter</h3>
-          <p>To jest primary lookup: linked accounts, breach signals, infostealer i AI synthesis.</p>
-        </article>
-        <article>
-          <b>LAYER 2</b>
-          <h3>Sherlock enrichment</h3>
-          <p>Holehe, Maigret, Wayback i crt.sh zostają jako dodatkowe źródła i korelacja.</p>
-        </article>
-        <article>
-          <b>LAYER 3</b>
-          <h3>OSA agent runtime</h3>
-          <p>Misje, scope, evidence ledger i agent są warstwą sterującą — nie landingiem produktu.</p>
-        </article>
-      </div>
     </section>
   </main>
 
   <footer>
-    <span>SHERLOCK OSA // DIGITAL FOOTPRINT CONTROL</span>
-    <span>IDENTITY → EXPOSURE → RISK → REMOVAL → VERIFICATION</span>
+    <span>SHERLOCK OSA // FULL SEARCH</span>
+    <span>CLAIM ≠ PROOF</span>
   </footer>
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
