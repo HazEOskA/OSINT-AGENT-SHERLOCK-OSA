@@ -64,6 +64,11 @@ def main() -> int:
         "search-kind",
         "search-query",
         "search-submit",
+        "search-mode",
+        "live-feed",
+        "source-runs",
+        "timeline-list",
+        "identity-list",
         "api-key",
         "deployment-mode",
         "result",
@@ -80,7 +85,7 @@ def main() -> int:
     styles = (SRC / "sherlock_osa" / "web" / "styles.css").read_text(encoding="utf-8")
     javascript_source = (SRC / "sherlock_osa" / "web" / "app.js").read_text(encoding="utf-8")
     checks.append(("ui_hidden_contract", "[hidden] { display: none !important; }" in styles))
-    checks.append(("ui_primary_lookup_route", '"/api/v1/search"' in javascript_source))
+    checks.append(("ui_primary_lookup_route", '"/api/v1/search/stream"' in javascript_source))
 
     node = shutil.which("node")
     if node:
