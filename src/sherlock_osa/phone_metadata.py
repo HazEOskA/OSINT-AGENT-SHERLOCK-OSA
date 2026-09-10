@@ -20,6 +20,9 @@ class PhoneMetadataModule:
     required_capability = "osint.phone.metadata"
     supported_kinds = frozenset({IdentifierKind.PHONE})
 
+    def __init__(self) -> None:
+        self.results: list[dict[str, Any]] = []
+
     async def lookup(
         self,
         identifier: ResearchIdentifier,
@@ -30,15 +33,17 @@ class PhoneMetadataModule:
         try:
             parsed = phonenumbers.parse(identifier.value, None)
         except phonenumbers.NumberParseException as exc:
-            return ModuleResult(
-                fields={
-                    "provider": "libphonenumber",
-                    "valid": False,
-                    "possible": False,
-                    "reason": str(exc),
-                },
-                confidence=0.0,
-            )
+            fields = {
+                "provider": "libphonenumber",
+                "valid": False,
+                "possible": False,
+                "reason": str(exc),
+                "owner_identified": False,
+                "precise_location_available": False,
+                "network_lookup_performed": False,
+            }
+            self.results.append(fields)
+            return ModuleResult(fields=fields, confidence=0.0)
 
         possible = phonenumbers.is_possible_number(parsed)
         valid = phonenumbers.is_valid_number(parsed)
@@ -89,6 +94,7 @@ class PhoneMetadataModule:
             "precise_location_available": False,
             "network_lookup_performed": False,
         }
+        self.results.append(fields)
         return ModuleResult(
             fields=fields,
             confidence=0.98 if valid else 0.55 if possible else 0.15,
