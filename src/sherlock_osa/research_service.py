@@ -15,6 +15,7 @@ from sherlock_osa.emailosint import EmailOsintClient
 from sherlock_osa.emailosint_module import EmailOsintResearchModule
 from sherlock_osa.errors import SherlockError
 from sherlock_osa.investigation import DetectiveInvestigator, InvestigationMode
+from sherlock_osa.phone_metadata import PhoneMetadataModule
 from sherlock_osa.planner import AdaptiveSourcePlanner
 from sherlock_osa.reporting import build_human_report
 from sherlock_osa.research import (
@@ -27,6 +28,8 @@ from sherlock_osa.research import (
 )
 from sherlock_osa.service import MissionService
 from sherlock_osa.signing import sha256_json, verify_scope
+from sherlock_osa.social_graph import build_social_graph
+from sherlock_osa.social_mesh import SocialMeshUsernameModule
 from sherlock_osa.source_pack import build_source_modules, source_health
 
 
@@ -152,7 +155,11 @@ class ResearchMissionService(MissionService):
     ) -> None:
         super().__init__(*args, **kwargs)
         self.research_engine = research_engine or BoundedResearchEngine(
-            modules=(SeedExpansionModule(), *build_source_modules()),
+            modules=(
+                SeedExpansionModule(),
+                PhoneMetadataModule(),
+                *build_source_modules("DEEP"),
+            ),
             budget=search_budget(InvestigationMode.DEEP),
             planner=AdaptiveSourcePlanner("DEEP"),
         )
@@ -160,8 +167,9 @@ class ResearchMissionService(MissionService):
     def _build_search_engine(self, mode: InvestigationMode) -> BoundedResearchEngine:
         modules = (
             SeedExpansionModule(),
+            PhoneMetadataModule(),
             EmailOsintResearchModule(EmailOsintClient.from_settings(self.settings)),
-            *build_source_modules(),
+            *build_source_modules(mode.name),
         )
         return BoundedResearchEngine(
             modules=modules,
@@ -183,13 +191,13 @@ class ResearchMissionService(MissionService):
             ),
             {},
         )
-        phone_ready = bool(hibp.get("ready"))
+        phone_exposure_ready = bool(hibp.get("ready"))
         return {
             **base,
             "execution_backing": (
-                "SIMULATION_PLUS_MAX_BOUNDED_PASSIVE_RESEARCH"
+                "SIMULATION_PLUS_SOCIAL_MESH_ULTRA_V3"
                 if full_pack
-                else "SIMULATION_PLUS_PARTIAL_BOUNDED_PASSIVE_RESEARCH"
+                else "SIMULATION_PLUS_PARTIAL_SOCIAL_MESH_ULTRA_V3"
             ),
             "research": research,
             "search": {
@@ -202,10 +210,15 @@ class ResearchMissionService(MissionService):
                     "DOMAIN",
                     "URL",
                 ],
-                "phone": "BACKED_HIBP" if phone_ready else "REQUIRES_HIBP_API_KEY",
+                "phone": (
+                    "OFFLINE_METADATA_PLUS_HIBP_EXPOSURE"
+                    if phone_exposure_ready
+                    else "OFFLINE_METADATA; HIBP_REQUIRES_API_KEY"
+                ),
                 "default_mode": "MAX",
                 "modes": ["QUICK", "DEEP", "MAX"],
-                "presentation": "HUMAN_REPORT_WITH_SOURCE_LINKS",
+                "presentation": "HUMAN_REPORT_WITH_SOCIAL_GRAPH_AND_SOURCE_LINKS",
+                "social_mesh": "V3_RUNTIME_PINNED_DATASETS",
             },
         }
 
@@ -219,6 +232,17 @@ class ResearchMissionService(MissionService):
                 "max_depth": self.research_engine.budget.max_depth,
                 "max_identifiers": self.research_engine.budget.max_identifiers,
             },
+            "local_sources": [
+                {
+                    "name": "phone.metadata",
+                    "family": "PHONE_METADATA",
+                    "package": "phonenumbers",
+                    "expected_version": "9.0.38",
+                    "network_effect": False,
+                    "owner_identification": False,
+                    "precise_location": False,
+                }
+            ],
             "search_modes": {
                 mode.name: {
                     "hard_timeout_seconds": search_budget(mode).hard_timeout_seconds,
@@ -284,9 +308,17 @@ class ResearchMissionService(MissionService):
                 InvestigationMode.MAX: len(candidates),
             }[mode]
             derived_queries = candidates[:candidate_limit]
+            # Only the canonical first candidate is allowed to fan out into the
+            # hundreds-site Social Mesh. Remaining deterministic candidates start
+            # deeper so GitHub/GitLab/Maigret may still check them without multiplying
+            # the expensive site-wide probe by every name variant.
             seeds = tuple(
-                ResearchIdentifier(IdentifierKind.USERNAME, candidate)
-                for candidate in derived_queries
+                ResearchIdentifier(
+                    IdentifierKind.USERNAME,
+                    candidate,
+                    depth=0 if index == 0 else 2,
+                )
+                for index, candidate in enumerate(derived_queries)
             )
         elif kind == "PHONE":
             normalized_phone = normalize_phone(query)
@@ -327,6 +359,7 @@ class ResearchMissionService(MissionService):
                     "kind": kind,
                     "mode": mode.name,
                     "seed_count": len(seeds),
+                    "social_mesh": True,
                 },
             )
 
@@ -349,6 +382,19 @@ class ResearchMissionService(MissionService):
                     ),
                 }
                 break
+
+        social_batches: list[dict[str, object]] = []
+        phone_results: list[dict[str, object]] = []
+        for module in engine.modules:
+            if isinstance(module, SocialMeshUsernameModule):
+                social_batches.extend(module.batches)
+            elif isinstance(module, PhoneMetadataModule):
+                phone_results.extend(module.results)
+
+        social_graph = build_social_graph(
+            emailosint=emailosint,
+            sensor_payloads={"social_mesh": {"batches": social_batches}},
+        )
 
         sources = self.research_sources()
         hibp = next(
@@ -377,6 +423,25 @@ class ResearchMissionService(MissionService):
             "report": report,
             "emailosint": emailosint,
             "emailosint_error": emailosint_error,
+            "social_graph": social_graph,
+            "social_mesh": {
+                "version": "v3",
+                "batches": social_batches,
+                "batch_count": len(social_batches),
+                "datasets": sources.get("social_mesh", {}).get("datasets", [])
+                if isinstance(sources.get("social_mesh"), Mapping)
+                else [],
+            },
+            "phone_intelligence": {
+                "metadata": phone_results,
+                "exposure_source": (
+                    "HIBP_ACCOUNT" if bool(hibp.get("ready")) else "UNAVAILABLE_NO_HIBP_KEY"
+                ),
+                "owner_identified": False,
+                "precise_location_available": False,
+            }
+            if kind == "PHONE"
+            else None,
             "detective": investigation.to_dict(),
             "sources": sources,
             "truth": {
@@ -384,13 +449,31 @@ class ResearchMissionService(MissionService):
                 "search_mode": mode.name,
                 "operator_auth_required": True,
                 "fabricated_results": False,
-                "phone_backing": bool(hibp.get("ready")),
-                "phone_source": "HIBP_ACCOUNT" if bool(hibp.get("ready")) else "UNAVAILABLE_NO_HIBP_KEY",
+                "phone_backing": bool(phone_results) or bool(hibp.get("ready")),
+                "phone_exposure_source": (
+                    "HIBP_ACCOUNT" if bool(hibp.get("ready")) else "UNAVAILABLE_NO_HIBP_KEY"
+                ),
+                "phone_metadata_source": "LIBPHONENUMBER_OFFLINE",
+                "social_mesh": "RUNTIME_PINNED_WMN_PLUS_SHERLOCK",
+                "social_probe_post_requests": False,
+                "social_probe_authenticated_sessions": False,
+                "social_probe_proxy_rotation": False,
+                "social_probe_captcha_bypass": False,
                 "hard_timeout_seconds": engine.budget.hard_timeout_seconds,
             },
         }
 
         if event_sink:
+            event_sink(
+                "social_graph_ready",
+                {
+                    "signals_total": social_graph["summary"]["signals_total"],
+                    "found_total": social_graph["summary"]["found_total"],
+                    "google_found": social_graph["summary"]["google_found"],
+                    "social_found": social_graph["summary"]["social_found"],
+                    "dating_found": social_graph["summary"]["dating_found"],
+                },
+            )
             event_sink(
                 "case_report_ready",
                 {
