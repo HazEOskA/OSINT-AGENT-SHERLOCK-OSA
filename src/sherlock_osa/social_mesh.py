@@ -29,6 +29,7 @@ class SocialMeshUsernameModule:
 
     def __init__(self, mode: str = "MAX") -> None:
         self.mode = str(mode).upper()
+        self.batches: list[dict[str, object]] = []
 
     async def lookup(
         self,
@@ -109,6 +110,9 @@ class SocialMeshUsernameModule:
         batch = payload.get("batch")
         if not isinstance(batch, Mapping):
             raise RuntimeError("social mesh batch missing")
+        batch_dict = dict(batch)
+        if len(self.batches) < 16:
+            self.batches.append(batch_dict)
 
         found_raw = batch.get("found", [])
         found = [item for item in found_raw if isinstance(item, Mapping)] if isinstance(found_raw, list) else []
@@ -142,7 +146,7 @@ class SocialMeshUsernameModule:
                 "provider": "socialmesh",
                 "found": bool(found),
                 "username": identifier.value,
-                "social_mesh": dict(batch),
+                "social_mesh": batch_dict,
                 "accounts": [dict(item) for item in found[:300]],
             },
             confidence=max(0.0, min(0.99, confidence)),
