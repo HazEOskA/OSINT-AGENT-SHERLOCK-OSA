@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import re
 from collections import Counter
 from dataclasses import dataclass
@@ -48,6 +47,7 @@ _URL_KEYS = (
     "web_url",
     "website_url",
     "uri_pretty",
+    "html_url",
     "link",
 )
 _USERNAME_KEYS = (
@@ -58,6 +58,14 @@ _USERNAME_KEYS = (
     "login",
     "user",
 )
+_STATUS_RANK = {
+    "FOUND": 0,
+    "OBSERVED": 1,
+    "UNKNOWN": 2,
+    "RATE_LIMITED": 3,
+    "BLOCKED": 4,
+    "NOT_FOUND": 5,
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,7 +172,6 @@ def _looks_like_service_record(mapping: Mapping[str, Any], fallback_name: str = 
     service = _service_name(mapping, fallback_name)
     if not service:
         return False
-
     presence_keys = {
         "exists",
         "registered",
@@ -183,9 +190,7 @@ def _looks_like_service_record(mapping: Mapping[str, Any], fallback_name: str = 
         return True
     if _profile_url(mapping):
         return True
-    if _username(mapping) and classify_service(service) != "OTHER":
-        return True
-    return False
+    return bool(_username(mapping) and classify_service(service) != "OTHER")
 
 
 def _account_from_mapping(
@@ -195,6 +200,8 @@ def _account_from_mapping(
     source: str,
     origin: str,
     confidence: float,
+    forced_status: str | None = None,
+    forced_username: str = "",
 ) -> SocialAccount | None:
     service = _service_name(mapping, fallback_service)
     if not service:
@@ -209,10 +216,10 @@ def _account_from_mapping(
     return SocialAccount(
         service=service,
         category=category,
-        status=signal_presence_status(mapping),
+        status=forced_status or signal_presence_status(mapping),
         source=source,
-        confidence=confidence,
-        username=_username(mapping),
+        confidence=max(0.0, min(0.99, float(confidence))),
+        username=_username(mapping) or forced_username,
         profile_url=profile_url,
         evidence_urls=_extract_urls(mapping),
         fields=dict(mapping),
@@ -250,7 +257,6 @@ def _walk_service_records(
             for key, child in list(node.items())[:256]:
                 if isinstance(child, (Mapping, list, tuple)):
                     child_service = service
-                    # Some providers use the service name itself as an object key.
                     key_text = str(key).strip()
                     if (
                         isinstance(child, Mapping)
@@ -284,31 +290,18 @@ def _emailosint_accounts(emailosint: object) -> list[SocialAccount]:
                 fields = signal.get("fields")
                 payload = signal.get("provider_payload")
                 base = payload if isinstance(payload, Mapping) else fields if isinstance(fields, Mapping) else signal
+                source_name = _string(signal.get("source")) or "EmailOSINT"
                 if isinstance(base, Mapping):
-                    source_name = _string(signal.get("source")) or "EmailOSINT"
                     account = _account_from_mapping(
                         base,
                         fallback_service=source_name,
                         source="EmailOSINT",
                         origin="emailosint.identity.signals",
                         confidence=0.96 if str(signal.get("status")) == "FOUND" else 0.72,
+                        forced_status=str(signal.get("status")) if signal.get("status") else None,
                     )
                     if account:
-                        # Preserve the normalized provider verdict if available.
-                        accounts.append(
-                            SocialAccount(
-                                service=account.service,
-                                category=account.category,
-                                status=str(signal.get("status") or account.status),
-                                source=account.source,
-                                confidence=account.confidence,
-                                username=account.username,
-                                profile_url=account.profile_url,
-                                evidence_urls=account.evidence_urls,
-                                fields=account.fields,
-                                origin=account.origin,
-                            )
-                        )
+                        accounts.append(account)
 
     provider = emailosint.get("provider")
     if isinstance(provider, Mapping):
@@ -330,18 +323,15 @@ def _emailosint_accounts(emailosint: object) -> list[SocialAccount]:
                         limit=500,
                     )
                 )
-
-        raw = provider.get("raw")
         accounts.extend(
             _walk_service_records(
-                raw,
+                provider.get("raw"),
                 source="EmailOSINT",
                 origin="emailosint.provider.raw",
                 confidence=0.82,
                 limit=700,
             )
         )
-
     return accounts
 
 
@@ -351,7 +341,6 @@ def _socialmesh_accounts(sensor_payloads: object) -> list[SocialAccount]:
     raw = sensor_payloads.get("social_mesh")
     if raw is None:
         return []
-
     batches: list[Mapping[str, Any]] = []
     if isinstance(raw, Mapping):
         raw_batches = raw.get("batches")
@@ -375,15 +364,14 @@ def _socialmesh_accounts(sensor_payloads: object) -> list[SocialAccount]:
             profile_url = _string(item.get("profile_url"))
             reliability = item.get("reliability", 0.75)
             confidence = float(reliability) if isinstance(reliability, (int, float)) else 0.75
-            category = classify_service(
-                service,
-                url=profile_url,
-                category_hint=item.get("category", ""),
-            )
             accounts.append(
                 SocialAccount(
                     service=service,
-                    category=category,
+                    category=classify_service(
+                        service,
+                        url=profile_url,
+                        category_hint=item.get("category", ""),
+                    ),
                     status="FOUND",
                     source="Sherlock Social Mesh",
                     confidence=confidence,
@@ -401,35 +389,135 @@ def _socialmesh_accounts(sensor_payloads: object) -> list[SocialAccount]:
     return accounts
 
 
+def _direct_source_accounts(sensor_payloads: object) -> list[SocialAccount]:
+    if not isinstance(sensor_payloads, Mapping):
+        return []
+    records = sensor_payloads.get("source_records")
+    if not isinstance(records, list):
+        return []
+
+    accounts: list[SocialAccount] = []
+    for record in records[:1000]:
+        if not isinstance(record, Mapping):
+            continue
+        source = _string(record.get("source"))
+        fields = record.get("fields")
+        if not isinstance(fields, Mapping):
+            continue
+        confidence_raw = record.get("confidence", 0.72)
+        confidence = float(confidence_raw) if isinstance(confidence_raw, (int, float)) else 0.72
+        seed_username = _string(record.get("identifier_value")) if record.get("identifier_kind") == "USERNAME" else ""
+
+        if source == "holehe.email":
+            registered = fields.get("registered")
+            if isinstance(registered, list):
+                for item in registered[:256]:
+                    if not isinstance(item, Mapping):
+                        continue
+                    account = _account_from_mapping(
+                        item,
+                        source="Holehe",
+                        origin="holehe.registered",
+                        confidence=max(0.75, confidence),
+                        forced_status="FOUND",
+                    )
+                    if account:
+                        accounts.append(account)
+            continue
+
+        if source == "maigret.username":
+            profiles = fields.get("profiles")
+            if isinstance(profiles, list):
+                for item in profiles[:256]:
+                    if not isinstance(item, Mapping):
+                        continue
+                    account = _account_from_mapping(
+                        item,
+                        fallback_service=_string(item.get("site")),
+                        source="Maigret",
+                        origin="maigret.profiles",
+                        confidence=max(0.7, confidence),
+                        forced_status="FOUND",
+                        forced_username=seed_username,
+                    )
+                    if account:
+                        accounts.append(account)
+            continue
+
+        if source in {"github.username", "gitlab.username"}:
+            service = "GitHub" if source.startswith("github") else "GitLab"
+            found = fields.get("found") is True
+            profile = fields.get("profile")
+            base = profile if isinstance(profile, Mapping) else fields
+            account = _account_from_mapping(
+                base,
+                fallback_service=service,
+                source=service,
+                origin=source,
+                confidence=confidence,
+                forced_status="FOUND" if found else "NOT_FOUND",
+                forced_username=seed_username,
+            )
+            if account:
+                accounts.append(account)
+            continue
+
+        if source == "gravatar.email":
+            if fields.get("found") is True:
+                profile = fields.get("profile")
+                if isinstance(profile, Mapping):
+                    accounts.extend(
+                        _walk_service_records(
+                            profile,
+                            source="Gravatar",
+                            origin="gravatar.profile",
+                            fallback_service="Gravatar",
+                            confidence=confidence,
+                            limit=128,
+                        )
+                    )
+            continue
+
+    return accounts
+
+
+def _merge_two(left: SocialAccount, right: SocialAccount) -> SocialAccount:
+    rank_left = _STATUS_RANK.get(left.status, 9)
+    rank_right = _STATUS_RANK.get(right.status, 9)
+    preferred = right if (rank_right, -right.confidence) < (rank_left, -left.confidence) else left
+    secondary = left if preferred is right else right
+    sources = " + ".join(
+        dict.fromkeys((*preferred.source.split(" + "), *secondary.source.split(" + ")))
+    )
+    urls = tuple(dict.fromkeys((*preferred.evidence_urls, *secondary.evidence_urls)))[:32]
+    return SocialAccount(
+        service=preferred.service,
+        category=preferred.category if preferred.category != "OTHER" else secondary.category,
+        status=preferred.status,
+        source=sources,
+        confidence=max(left.confidence, right.confidence),
+        username=preferred.username or secondary.username,
+        profile_url=preferred.profile_url or secondary.profile_url,
+        evidence_urls=urls,
+        fields=preferred.fields or secondary.fields,
+        origin=" + ".join(dict.fromkeys((preferred.origin, secondary.origin))),
+    )
+
+
 def _dedupe_accounts(accounts: Iterable[SocialAccount]) -> list[SocialAccount]:
     merged: dict[str, SocialAccount] = {}
     for account in accounts:
         service_key = re.sub(r"[^a-z0-9]+", "", account.service.casefold())
-        url_key = account.profile_url.casefold().rstrip("/")
         user_key = account.username.casefold()
-        key = "|".join((service_key, url_key, user_key, account.status))
+        url_key = account.profile_url.casefold().rstrip("/")
+        identity_key = user_key or url_key or service_key
+        key = "|".join((service_key, identity_key))
         existing = merged.get(key)
-        if existing is None or account.confidence > existing.confidence:
-            merged[key] = account
-        elif existing:
-            urls = tuple(dict.fromkeys((*existing.evidence_urls, *account.evidence_urls)))[:32]
-            sources = " + ".join(dict.fromkeys((*existing.source.split(" + "), *account.source.split(" + "))))
-            merged[key] = SocialAccount(
-                service=existing.service,
-                category=existing.category if existing.category != "OTHER" else account.category,
-                status=existing.status,
-                source=sources,
-                confidence=max(existing.confidence, account.confidence),
-                username=existing.username or account.username,
-                profile_url=existing.profile_url or account.profile_url,
-                evidence_urls=urls,
-                fields=existing.fields or account.fields,
-                origin=existing.origin,
-            )
+        merged[key] = account if existing is None else _merge_two(existing, account)
     return sorted(
         merged.values(),
         key=lambda item: (
-            item.status != "FOUND",
+            _STATUS_RANK.get(item.status, 9),
             SOCIAL_CATEGORIES.index(item.category) if item.category in SOCIAL_CATEGORIES else 99,
             -item.confidence,
             item.service.casefold(),
@@ -446,11 +534,11 @@ def build_social_graph(
         [
             *_emailosint_accounts(emailosint),
             *_socialmesh_accounts(sensor_payloads),
+            *_direct_source_accounts(sensor_payloads),
         ]
     )
     account_dicts = [account.to_dict() for account in accounts]
     grouped = categorise_accounts(account_dicts)
-
     category_counts = {
         category: sum(1 for item in items if item.get("status") == "FOUND")
         for category, items in grouped.items()
@@ -464,7 +552,8 @@ def build_social_graph(
     seen_nodes: set[str] = {"target"}
 
     for index, account in enumerate(accounts[:500]):
-        service_id = "service:" + re.sub(r"[^a-z0-9]+", "-", account.service.casefold()).strip("-")
+        service_slug = re.sub(r"[^a-z0-9]+", "-", account.service.casefold()).strip("-") or str(index)
+        service_id = "service:" + service_slug
         if service_id not in seen_nodes:
             seen_nodes.add(service_id)
             nodes.append(
@@ -491,11 +580,7 @@ def build_social_graph(
             if username_id not in seen_nodes:
                 seen_nodes.add(username_id)
                 nodes.append(
-                    {
-                        "id": username_id,
-                        "type": "USERNAME",
-                        "label": account.username,
-                    }
+                    {"id": username_id, "type": "USERNAME", "label": account.username}
                 )
             edges.append(
                 {
@@ -510,7 +595,7 @@ def build_social_graph(
             )
 
     return {
-        "version": "v3",
+        "version": "v3.1",
         "accounts": account_dicts,
         "categories": grouped,
         "category_counts": category_counts,
@@ -522,6 +607,8 @@ def build_social_graph(
             "social_found": category_counts.get("SOCIAL", 0),
             "dating_found": category_counts.get("DATING", 0),
             "messaging_found": category_counts.get("MESSAGING", 0),
+            "developer_found": category_counts.get("DEVELOPER", 0),
+            "music_found": category_counts.get("MUSIC", 0),
         },
         "graph": {
             "nodes": nodes,
@@ -533,6 +620,7 @@ def build_social_graph(
             "found_requires_source_signal": True,
             "category_is_classification_not_identity_proof": True,
             "same_username_is_not_same_person": True,
+            "direct_sources_merged": True,
             "raw_secret_values_exposed": False,
         },
     }
