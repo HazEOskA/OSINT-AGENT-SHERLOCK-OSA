@@ -11,6 +11,7 @@ from sherlock_osa.research import (
     ResearchIdentifier,
     ResearchModule,
 )
+from sherlock_osa.social_mesh import SocialMeshUsernameModule
 from sherlock_osa.source_registry import (
     COMMONCRAWL_DOMAIN,
     COMMONCRAWL_URL,
@@ -22,6 +23,7 @@ from sherlock_osa.source_registry import (
     HOLEHE,
     MAIGRET,
     RDAP_DOMAIN,
+    SOCIAL_MESH_USERNAME,
     SOURCE_DESCRIPTORS,
     WAYBACK_DOMAIN,
     WAYBACK_URL,
@@ -164,8 +166,16 @@ class IsolatedSourceModule(ResearchModule):
         )
 
 
-def build_source_modules() -> tuple[ResearchModule, ...]:
-    return tuple(IsolatedSourceModule(descriptor) for descriptor in SOURCE_DESCRIPTORS)
+def build_source_modules(mode: str = "DEEP") -> tuple[ResearchModule, ...]:
+    modules: list[ResearchModule] = []
+    for descriptor in SOURCE_DESCRIPTORS:
+        if descriptor.name == SOCIAL_MESH_USERNAME.name:
+            social = SocialMeshUsernameModule(mode)
+            social.descriptor = descriptor
+            modules.append(social)
+        else:
+            modules.append(IsolatedSourceModule(descriptor))
+    return tuple(modules)
 
 
 def source_health() -> dict[str, object]:
@@ -187,6 +197,7 @@ __all__ = [
     "IsolatedSourceModule",
     "MAIGRET",
     "RDAP_DOMAIN",
+    "SOCIAL_MESH_USERNAME",
     "SOURCE_DESCRIPTORS",
     "WAYBACK_DOMAIN",
     "WAYBACK_URL",
