@@ -48,14 +48,19 @@ def main() -> int:
     repositories = benchmark.get("repositories", [])
     checks.append(("reference_count_20", len(repositories) == 20))
     checks.append(("reference_unique", len({item["name"] for item in repositories}) == 20))
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     checks.append((
         "engine_pin_documented",
-        "f365360383511fea13cd3f7af36ecbbc720ce38d"
-        in (ROOT / "README.md").read_text(encoding="utf-8"),
+        "f365360383511fea13cd3f7af36ecbbc720ce38d" in readme,
     ))
     checks.append((
         "emailosint_primary_documented",
-        "POST /api/v1/lookup/email" in (ROOT / "README.md").read_text(encoding="utf-8"),
+        "POST /api/v1/lookup/email" in readme,
+    ))
+    checks.append((
+        "phonenumbers_pinned",
+        '"phonenumbers==9.0.38"' in pyproject,
     ))
 
     parser = UiContractParser()
@@ -100,9 +105,45 @@ def main() -> int:
     parity_styles = (SRC / "sherlock_osa" / "web" / "parity.css").read_text(encoding="utf-8")
     javascript_source = (SRC / "sherlock_osa" / "web" / "app.js").read_text(encoding="utf-8")
     parity_javascript_source = (SRC / "sherlock_osa" / "web" / "parity.js").read_text(encoding="utf-8")
+    research_service = (SRC / "sherlock_osa" / "research_service.py").read_text(encoding="utf-8")
+    site_probe = (SRC / "sherlock_osa" / "site_probe.py").read_text(encoding="utf-8")
+    social_graph = (SRC / "sherlock_osa" / "social_graph.py").read_text(encoding="utf-8")
+
     checks.append(("ui_hidden_contract", "[hidden] { display: none !important; }" in styles))
     checks.append(("ui_primary_lookup_route", '"/api/v1/search/stream"' in javascript_source))
-    checks.append(("ui_parity_contract", "renderParity" in parity_javascript_source and ".parity-card" in parity_styles))
+    checks.append((
+        "ui_parity_contract",
+        "renderParity" in parity_javascript_source and ".parity-card" in parity_styles,
+    ))
+    checks.append((
+        "ui_social_graph_v3_contract",
+        "renderSocialGraph" in parity_javascript_source
+        and "social-graph-section" in parity_javascript_source
+        and "DATING" in parity_javascript_source
+        and "GOOGLE" in parity_javascript_source,
+    ))
+    checks.append((
+        "social_mesh_runtime_dataset_pins",
+        "e62338e4fc88536a330733d355a9d33a3a1697c6" in site_probe
+        and "376018708c0f6948d3f978a9ae2915024e794654" in site_probe,
+    ))
+    checks.append((
+        "social_mesh_guardrails",
+        'method.upper() not in {"GET", "HEAD"}' in site_probe
+        and '"captcha_bypass": False' in site_probe
+        and '"authenticated_sessions_used": False' in site_probe,
+    ))
+    checks.append((
+        "social_graph_in_full_search",
+        "build_social_graph" in research_service
+        and '"social_graph": social_graph' in research_service
+        and '"social_probe_post_requests": False' in research_service,
+    ))
+    checks.append((
+        "social_graph_truth_contract",
+        '"same_username_is_not_same_person": True' in social_graph
+        and '"found_requires_source_signal": True' in social_graph,
+    ))
 
     node = shutil.which("node")
     if node:
