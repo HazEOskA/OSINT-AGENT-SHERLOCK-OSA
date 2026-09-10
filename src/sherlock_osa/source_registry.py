@@ -130,6 +130,21 @@ MAIGRET = SourceDescriptor(
     identity_capable=True,
 )
 
+SOCIAL_MESH_USERNAME = SourceDescriptor(
+    name="socialmesh.username",
+    family="SOCIAL_MESH",
+    supported_kinds=frozenset({IdentifierKind.USERNAME}),
+    required_capability="osint.username.lookup",
+    max_identifier_depth=1,
+    priority=18,
+    cost=SourceCost.HIGH,
+    trust_class=SourceTrust.AGGREGATOR,
+    rate_limit="SITE_DEFINED",
+    timeout_seconds=55.0,
+    pivot_types=frozenset({IdentifierKind.URL}),
+    identity_capable=True,
+)
+
 GRAVATAR_EMAIL = SourceDescriptor(
     name="gravatar.email",
     family="IDENTITY",
@@ -284,6 +299,7 @@ SOURCE_DESCRIPTORS = (
     GITLAB_USERNAME,
     RDAP_DOMAIN,
     CRTSH_DOMAIN,
+    SOCIAL_MESH_USERNAME,
     HOLEHE,
     MAIGRET,
     WAYBACK_URL,
@@ -296,11 +312,33 @@ SOURCE_DESCRIPTORS = (
 def registry_health() -> dict[str, object]:
     sources = [descriptor.health() for descriptor in SOURCE_DESCRIPTORS]
     return {
-        "registry_version": "v2",
+        "registry_version": "v3",
         "source_count": len(sources),
         "sources": sources,
         "all_dependencies_available": all(bool(source["available"]) for source in sources),
         "all_versions_pinned": all(bool(source["version_match"]) for source in sources),
         "ready_sources": sum(1 for source in sources if bool(source["ready"])),
         "credential_gated_sources": sum(1 for source in sources if bool(source["requires_key"])),
+        "social_mesh": {
+            "datasets": [
+                {
+                    "name": "WhatsMyName",
+                    "commit": "e62338e4fc88536a330733d355a9d33a3a1697c6",
+                    "license": "CC BY-SA 4.0",
+                    "mode": "RUNTIME_REFERENCE_NOT_VENDORED",
+                },
+                {
+                    "name": "Sherlock Project",
+                    "commit": "376018708c0f6948d3f978a9ae2915024e794654",
+                    "license": "MIT",
+                    "mode": "RUNTIME_REFERENCE_NOT_VENDORED",
+                },
+            ],
+            "guardrails": {
+                "authenticated_sessions": False,
+                "proxy_rotation": False,
+                "captcha_bypass": False,
+                "dataset_post_probes": "SKIPPED",
+            },
+        },
     }
