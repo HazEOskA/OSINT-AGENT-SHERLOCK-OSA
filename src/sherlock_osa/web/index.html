@@ -10,6 +10,7 @@
   >
   <title>Sherlock OSA — MAX Investigation</title>
   <link rel="stylesheet" href="/assets/styles.css">
+  <link rel="stylesheet" href="/assets/parity.css">
 </head>
 <body>
   <div class="ambient ambient-a" aria-hidden="true"></div>
@@ -48,6 +49,11 @@
           <span>DOMENA</span>
           <span>URL</span>
         </div>
+
+        <p class="parity-hero-note">
+          Email uruchamia pełny EmailOSINT Parity+ oraz dodatkowy Sherlock MAX mesh.
+          Bezpieczne pola providera są zachowywane, sekrety pozostają zredagowane.
+        </p>
 
         <div class="max-principles">
           <article><strong>FAKT</strong><small>bezpośredni sygnał źródłowy</small></article>
@@ -163,7 +169,7 @@
 
       <section class="report-section" id="emailosint-section" hidden>
         <div class="report-section-head">
-          <div><span>EMAIL INTELLIGENCE</span><h3>EmailOSINT</h3></div>
+          <div><span>EMAIL INTELLIGENCE</span><h3>EmailOSINT — szybki widok</h3></div>
           <small id="emailosint-status">OK</small>
         </div>
         <div class="email-stats">
@@ -184,6 +190,84 @@
             <div class="panel-title"><span>03</span><h3>Infostealer</h3></div>
             <div class="item-list" id="stealer-list"></div>
           </section>
+        </div>
+      </section>
+
+      <section class="report-section" id="email-parity-section" hidden>
+        <div class="report-section-head">
+          <div><span>EMAILOSINT PARITY+</span><h3>Pełna inteligencja z providera</h3></div>
+          <small id="email-parity-state">PARITY+</small>
+        </div>
+
+        <div class="email-parity-grid">
+          <article><span>ŹRÓDŁA PROVIDERA</span><strong id="email-provider-source-count">0</strong></article>
+          <article><span>EVENTY SSE</span><strong id="email-provider-event-count">0</strong></article>
+          <article><span>SYGNAŁY IDENTITY</span><strong id="email-provider-signal-count">0</strong></article>
+        </div>
+
+        <article class="parity-ai-card">
+          <div class="parity-ai-top">
+            <div>
+              <span>AI PROFILE SYNTHESIS</span>
+              <h4 id="email-ai-headline">Brak syntezy AI od EmailOSINT.</h4>
+            </div>
+            <b class="parity-ai-risk" id="email-ai-risk">UNKNOWN</b>
+          </div>
+          <p class="parity-ai-summary" id="email-ai-summary"></p>
+          <p class="parity-ai-reason" id="email-ai-reason"></p>
+          <div class="parity-fields" id="email-ai-payload"></div>
+        </article>
+
+        <div class="parity-meta-strip">
+          <article><span>FIRST SEEN</span><strong id="email-first-seen">—</strong></article>
+          <article><span>LAST SEEN</span><strong id="email-last-seen">—</strong></article>
+        </div>
+
+        <div class="parity-summary-grid">
+          <section class="parity-summary-box">
+            <span>PROVIDER META</span>
+            <div class="parity-fields" id="email-meta-fields"></div>
+          </section>
+          <section class="parity-summary-box">
+            <span>EVENT COUNTS</span>
+            <div class="parity-event-counts" id="email-event-counts"></div>
+          </section>
+        </div>
+
+        <div class="parity-section-block">
+          <header>
+            <div><span class="parity-subtitle">SOURCE PROVENANCE</span><h4>Źródła widziane przez EmailOSINT</h4></div>
+          </header>
+          <div class="parity-sources" id="email-provider-source-list"></div>
+        </div>
+
+        <div class="parity-section-block">
+          <header>
+            <div><span class="parity-subtitle">100+ IDENTITY LAYER</span><h4>Wszystkie bezpieczne sygnały providera</h4></div>
+          </header>
+          <div class="parity-card-list" id="email-signals-list"></div>
+        </div>
+
+        <div class="parity-section-block">
+          <header>
+            <div><span class="parity-subtitle">BREACH CORPUS</span><h4>Pełne bezpieczne szczegóły wycieków</h4></div>
+          </header>
+          <div class="parity-summary-box">
+            <span>ZBIORCZE META</span>
+            <div class="parity-fields" id="email-breach-summary-fields"></div>
+          </div>
+          <div class="parity-card-list" id="email-breach-parity-list"></div>
+        </div>
+
+        <div class="parity-section-block">
+          <header>
+            <div><span class="parity-subtitle">INFOSTEALER EXPOSURE</span><h4>Metadata capture — sekrety zredagowane</h4></div>
+          </header>
+          <div class="parity-summary-box">
+            <span>ZBIORCZE META</span>
+            <div class="parity-fields" id="email-stealer-summary-fields"></div>
+          </div>
+          <div class="parity-card-list" id="email-stealer-parity-list"></div>
         </div>
       </section>
 
@@ -254,5 +338,6 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
   <script src="/assets/app.js" defer></script>
+  <script src="/assets/parity.js" defer></script>
 </body>
 </html>
