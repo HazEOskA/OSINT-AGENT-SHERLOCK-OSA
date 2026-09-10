@@ -38,12 +38,7 @@ IDENTIFIER_EVENT_NAMES = frozenset(
     }
 )
 BREACH_EVENT_NAMES = frozenset(
-    {
-        "data_breaches",
-        "breaches",
-        "breach_result",
-        "breach_results",
-    }
+    {"data_breaches", "breaches", "breach_result", "breach_results"}
 )
 STEALER_EVENT_NAMES = frozenset(
     {
@@ -55,23 +50,29 @@ STEALER_EVENT_NAMES = frozenset(
     }
 )
 AI_EVENT_NAMES = frozenset(
-    {
-        "ai_summary",
-        "summary",
-        "profile_summary",
-        "synthesis",
-    }
+    {"ai_summary", "summary", "profile_summary", "synthesis"}
 )
 DONE_EVENT_NAMES = frozenset({"done", "complete", "completed"})
 
 
+def _is_sensitive_key(name: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9]", "", name.casefold())
+    return any(part in normalized for part in SENSITIVE_KEY_PARTS)
+
+
 def _redact(value: Any) -> Any:
+    """Preserve safe provider metadata while removing credential material.
+
+    Boolean/numeric exposure flags are retained even when their key mentions a
+    credential class (for example ``password_present: true``). Secret-bearing
+    strings/containers are redacted recursively.
+    """
+
     if isinstance(value, Mapping):
         cleaned: dict[str, Any] = {}
         for key, item in value.items():
             name = str(key)
-            normalized = re.sub(r"[^a-z0-9]", "", name.lower())
-            if any(part in normalized for part in SENSITIVE_KEY_PARTS):
+            if _is_sensitive_key(name) and not isinstance(item, (bool, int, float, type(None))):
                 cleaned[name] = "[REDACTED]"
             else:
                 cleaned[name] = _redact(item)
@@ -84,21 +85,19 @@ def _redact(value: Any) -> Any:
 
 
 def _find_first(value: Any, names: set[str]) -> Any:
-    wanted = {name.lower() for name in names}
+    wanted = {name.casefold() for name in names}
     queue = [value]
     while queue:
         current = queue.pop(0)
         if isinstance(current, Mapping):
             for key, item in current.items():
-                if str(key).lower() in wanted:
+                if str(key).casefold() in wanted:
                     return item
                 if isinstance(item, (Mapping, list, tuple)):
                     queue.append(item)
         elif isinstance(current, (list, tuple)):
             queue.extend(
-                item
-                for item in current
-                if isinstance(item, (Mapping, list, tuple))
+                item for item in current if isinstance(item, (Mapping, list, tuple))
             )
     return None
 
@@ -129,10 +128,16 @@ def _as_list(value: Any) -> list[Any]:
     return [value]
 
 
+def _string(value: Any) -> str | None:
+    if isinstance(value, str):
+        candidate = value.strip()
+        return candidate or None
+    return None
+
+
 def _text(value: Any) -> str | None:
     if isinstance(value, str):
-        stripped = value.strip()
-        return stripped or None
+        return _string(value)
     if isinstance(value, Mapping):
         for key in (
             "summary",
@@ -144,9 +149,9 @@ def _text(value: Any) -> str | None:
             "description",
             "explanation",
         ):
-            item = value.get(key)
-            if isinstance(item, str) and item.strip():
-                return item.strip()
+            candidate = _string(value.get(key))
+            if candidate:
+                return candidate
     return None
 
 
@@ -195,11 +200,14 @@ def _events(provider: Any) -> list[Mapping[str, Any]]:
     return [item for item in raw if isinstance(item, Mapping)]
 
 
-def _event_payloads(provider: Any, event_names: set[str] | frozenset[str]) -> list[Any]:
-    wanted = {name.lower() for name in event_names}
+def _event_payloads(
+    provider: Any,
+    event_names: set[str] | frozenset[str],
+) -> list[Any]:
+    wanted = {name.casefold() for name in event_names}
     found: list[Any] = []
     for event in _events(provider):
-        name = str(event.get("event", "")).lower()
+        name = str(event.get("event", "")).casefold()
         if name in wanted:
             found.append(event.get("data"))
     return found
@@ -207,7 +215,12 @@ def _event_payloads(provider: Any, event_names: set[str] | frozenset[str]) -> li
 
 def _canonical(value: Any) -> str:
     try:
-        return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        return json.dumps(
+            value,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
     except (TypeError, ValueError):
         return repr(value)
 
@@ -229,7 +242,7 @@ def _extract_urls(value: Any, *, limit: int = 64) -> list[str]:
     seen: set[str] = set()
 
     def walk(node: Any, depth: int = 0) -> None:
-        if depth > 6 or len(urls) >= limit:
+        if depth > 7 or len(urls) >= limit:
             return
         if isinstance(node, str):
             candidate = node.strip()
@@ -238,11 +251,10 @@ def _extract_urls(value: Any, *, limit: int = 64) -> list[str]:
                 urls.append(candidate[:2048])
             return
         if isinstance(node, Mapping):
-            for child in list(node.values())[:128]:
+            for child in list(node.values())[:192]:
                 walk(child, depth + 1)
-            return
-        if isinstance(node, (list, tuple)):
-            for child in list(node)[:128]:
+        elif isinstance(node, (list, tuple)):
+            for child in list(node)[:192]:
                 walk(child, depth + 1)
 
     walk(value)
@@ -296,39 +308,43 @@ def _presence_status(fields: Any) -> str:
         "valid",
         "present",
     ):
-        value = fields.get(key)
-        if value is True:
+        state = fields.get(key)
+        if state is True:
             positives.append(key)
-        elif value is False:
+        elif state is False:
             negatives.append(key)
     if positives:
         return "FOUND"
     if negatives:
         return "NOT_FOUND"
-    if _extract_urls(fields, limit=1):
-        return "OBSERVED"
     return "OBSERVED"
 
 
 def _identity_signals(provider: Any) -> list[dict[str, Any]]:
-    signals: list[dict[str, Any]] = []
+    """Normalize provider identity events while retaining raw events separately.
 
-    for index, event in enumerate(_events(provider)):
-        event_name = str(event.get("event", "")).lower()
+    ``event_index`` intentionally does not participate in normalized signal output,
+    so repeated transport events are deduplicated without losing them from
+    ``provider.events``.
+    """
+
+    signals: list[dict[str, Any]] = []
+    for event in _events(provider):
+        event_name = str(event.get("event", "")).casefold()
         if event_name not in IDENTIFIER_EVENT_NAMES:
             continue
         payload = event.get("data")
         fields = _fields_from_identifier_payload(payload)
-        signal = {
-            "source": _module_name(payload),
-            "event": event_name,
-            "event_index": int(event.get("index", index)),
-            "status": _presence_status(fields),
-            "fields": fields,
-            "urls": _extract_urls(payload),
-            "provider_payload": payload,
-        }
-        signals.append(signal)
+        signals.append(
+            {
+                "source": _module_name(payload),
+                "event": event_name,
+                "status": _presence_status(fields),
+                "fields": fields,
+                "urls": _extract_urls(payload),
+                "provider_payload": payload,
+            }
+        )
 
     if not signals:
         raw_candidates = _find_first(
@@ -341,13 +357,12 @@ def _identity_signals(provider: Any) -> list[dict[str, Any]]:
                 "identifier_results",
             },
         )
-        for index, payload in enumerate(_as_list(raw_candidates)):
+        for payload in _as_list(raw_candidates):
             fields = _fields_from_identifier_payload(payload)
             signals.append(
                 {
                     "source": _module_name(payload),
                     "event": "json_identifier",
-                    "event_index": index,
                     "status": _presence_status(fields),
                     "fields": fields,
                     "urls": _extract_urls(payload),
@@ -379,8 +394,16 @@ def _aggregate_event_results(
             ):
                 if key in payload and payload.get(key) is not None:
                     summary[key] = payload.get(key)
+
             nested = None
-            for key in ("results", "items", "records", "data", "breaches", "logs"):
+            for key in (
+                "results",
+                "items",
+                "records",
+                "data",
+                "breaches",
+                "logs",
+            ):
                 candidate = payload.get(key)
                 if isinstance(candidate, list):
                     nested = candidate
@@ -393,8 +416,7 @@ def _aggregate_event_results(
             results.extend(_as_list(payload))
 
     if not results:
-        fallback = _find_first(provider, fallback_names)
-        results.extend(_as_list(fallback))
+        results.extend(_as_list(_find_first(provider, fallback_names)))
 
     return _dedupe(results), summary
 
@@ -407,12 +429,7 @@ def _ai_profile(provider: Any) -> dict[str, Any]:
     if payload is None:
         payload = _find_first(
             provider,
-            {
-                "ai_summary",
-                "profile_summary",
-                "summary",
-                "synthesis",
-            },
+            {"ai_summary", "profile_summary", "summary", "synthesis"},
         )
 
     if isinstance(payload, str):
@@ -424,22 +441,22 @@ def _ai_profile(provider: Any) -> dict[str, Any]:
     else:
         payload_map = {"value": payload}
 
-    headline = _text(
-        {
-            "headline": payload_map.get("headline"),
-            "summary": payload_map.get("summary"),
-            "text": payload_map.get("text"),
-        }
+    headline = (
+        _string(payload_map.get("headline"))
+        or _string(payload_map.get("title"))
+        or _string(payload_map.get("summary"))
+        or _string(payload_map.get("text"))
     )
-    summary = _text(
-        {
-            "summary": payload_map.get("summary"),
-            "text": payload_map.get("text"),
-            "headline": payload_map.get("headline"),
-        }
+    summary = (
+        _string(payload_map.get("summary"))
+        or _string(payload_map.get("text"))
+        or headline
     )
-
-    risk = payload_map.get("risk") or payload_map.get("risk_level") or payload_map.get("severity")
+    risk = (
+        payload_map.get("risk")
+        or payload_map.get("risk_level")
+        or payload_map.get("severity")
+    )
     reason = (
         payload_map.get("reason")
         or payload_map.get("reasoning")
@@ -485,19 +502,22 @@ def _meta(provider: Any) -> dict[str, Any]:
 
     first_seen = _find_first(merged, {"first_seen", "firstseen"})
     last_seen = _find_first(merged, {"last_seen", "lastseen"})
-    return {
-        **merged,
-        "first_seen": first_seen,
-        "last_seen": last_seen,
-    }
+    return {**merged, "first_seen": first_seen, "last_seen": last_seen}
 
 
 def _event_counts(provider: Any) -> dict[str, int]:
-    counts = Counter(str(event.get("event", "message")).lower() for event in _events(provider))
+    counts = Counter(
+        str(event.get("event", "message")).casefold()
+        for event in _events(provider)
+    )
     return dict(sorted(counts.items()))
 
 
-def _actions(accounts: list[Any], breaches: list[Any], stealer: list[Any]) -> list[dict[str, Any]]:
+def _actions(
+    accounts: list[Any],
+    breaches: list[Any],
+    stealer: list[Any],
+) -> list[dict[str, Any]]:
     actions: list[dict[str, Any]] = []
     if stealer:
         actions.append(
@@ -566,7 +586,13 @@ def _normalise(email: str, provider: Any) -> dict[str, Any]:
     stealer, stealer_summary = _aggregate_event_results(
         safe_provider,
         STEALER_EVENT_NAMES,
-        {"infostealer", "infostealer_logs", "stealer_logs", "stealer_results", "stealer"},
+        {
+            "infostealer",
+            "infostealer_logs",
+            "stealer_logs",
+            "stealer_results",
+            "stealer",
+        },
     )
 
     ai = _ai_profile(safe_provider)
@@ -602,6 +628,13 @@ def _normalise(email: str, provider: Any) -> dict[str, Any]:
 
     event_counts = _event_counts(safe_provider)
     events = _events(safe_provider)
+    source_names = sorted(
+        {
+            str(signal.get("source", "unknown"))
+            for signal in signals
+            if signal.get("source")
+        }
+    )
     summary_text = ai.get("summary") or ai.get("headline")
 
     return {
@@ -615,7 +648,9 @@ def _normalise(email: str, provider: Any) -> dict[str, Any]:
             "counts": {
                 "signals": len(signals),
                 "linked_accounts": len(linked),
-                "not_found": sum(1 for signal in signals if signal.get("status") == "NOT_FOUND"),
+                "not_found": sum(
+                    1 for signal in signals if signal.get("status") == "NOT_FOUND"
+                ),
             },
         },
         "exposure": {
@@ -642,13 +677,7 @@ def _normalise(email: str, provider: Any) -> dict[str, Any]:
             "meta": meta,
         },
         "provenance": {
-            "sources": sorted(
-                {
-                    str(signal.get("source", "unknown"))
-                    for signal in signals
-                    if signal.get("source")
-                }
-            ),
+            "sources": source_names,
             "event_counts": event_counts,
             "events_total": len(events),
             "transport": (
@@ -657,9 +686,7 @@ def _normalise(email: str, provider: Any) -> dict[str, Any]:
                 else "json"
             ),
         },
-        "removal": {
-            "actions": _actions(linked, breaches, stealer),
-        },
+        "removal": {"actions": _actions(linked, breaches, stealer)},
         "verification": {
             "lookup_completed": True,
             "provider": "EmailOSINT",
@@ -676,13 +703,7 @@ def _normalise(email: str, provider: Any) -> dict[str, Any]:
             "linked_account_count": len(linked),
             "breach_result_count": len(breaches),
             "infostealer_result_count": len(stealer),
-            "provider_source_count": len(
-                {
-                    str(signal.get("source", "unknown"))
-                    for signal in signals
-                    if signal.get("source")
-                }
-            ),
+            "provider_source_count": len(source_names),
             "redaction": "CREDENTIAL_SECRET_TOKEN_COOKIE_SESSION_VALUES",
         },
         "provider": {
@@ -711,8 +732,12 @@ class EmailOsintClient:
             auth_header=str(
                 getattr(settings, "emailosint_auth_header", "Authorization")
             ),
-            auth_scheme=str(getattr(settings, "emailosint_auth_scheme", "Bearer")),
-            timeout_seconds=int(getattr(settings, "emailosint_timeout_seconds", 30)),
+            auth_scheme=str(
+                getattr(settings, "emailosint_auth_scheme", "Bearer")
+            ),
+            timeout_seconds=int(
+                getattr(settings, "emailosint_timeout_seconds", 30)
+            ),
         )
 
     def lookup(self, raw: object) -> dict[str, Any]:
@@ -732,16 +757,19 @@ class EmailOsintClient:
             "User-Agent": "sherlock-osa/0.7.0",
         }
         if self.api_key:
-            value = (
+            auth_value = (
                 f"{self.auth_scheme} {self.api_key}".strip()
                 if self.auth_scheme
                 else self.api_key
             )
-            headers[self.auth_header] = value
+            headers[self.auth_header] = auth_value
 
         request = urllib.request.Request(
             self.endpoint,
-            data=json.dumps({"email": email}, separators=(",", ":")).encode("utf-8"),
+            data=json.dumps(
+                {"email": email},
+                separators=(",", ":"),
+            ).encode("utf-8"),
             method="POST",
             headers=headers,
         )
@@ -751,7 +779,7 @@ class EmailOsintClient:
                 timeout=self.timeout_seconds,
             ) as response:
                 body = response.read(5_000_000)
-                content_type = response.headers.get("Content-Type", "").lower()
+                content_type = response.headers.get("Content-Type", "").casefold()
         except urllib.error.HTTPError as exc:
             exc.read(2048)
             raise SherlockError(
@@ -767,10 +795,11 @@ class EmailOsintClient:
             ) from exc
 
         try:
-            if "text/event-stream" in content_type:
-                provider = _parse_sse(body)
-            else:
-                provider = json.loads(body)
+            provider = (
+                _parse_sse(body)
+                if "text/event-stream" in content_type
+                else json.loads(body)
+            )
         except (json.JSONDecodeError, UnicodeDecodeError) as exc:
             raise SherlockError(
                 "EMAILOSINT_INVALID_RESPONSE",
