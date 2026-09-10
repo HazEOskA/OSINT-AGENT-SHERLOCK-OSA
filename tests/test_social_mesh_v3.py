@@ -56,7 +56,7 @@ class DatasetProbeTests(unittest.TestCase):
                 },
                 {
                     "name": "UnsafePost",
-                    "uri_check": "https://example.test/check",
+                    "uri_check": "https://example.test/check/{account}",
                     "post_body": '{"username":"{account}"}',
                     "headers": {"Content-Type": "application/json"},
                     "e_code": 200,
