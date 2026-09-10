@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import importlib.metadata
 import json
 
 from sherlock_osa.source_pack import source_health
+
+
+PHONE_NUMBERS_VERSION = "9.0.38"
 
 
 def main() -> int:
@@ -19,8 +23,15 @@ def main() -> int:
         "wayback.url",
         "wayback.domain",
         "crtsh.domain",
+        "socialmesh.username",
     }
-    return 0 if required <= sources.keys() else 1
+    if not required <= sources.keys():
+        return 1
+    try:
+        phone_version = importlib.metadata.version("phonenumbers")
+    except importlib.metadata.PackageNotFoundError:
+        return 1
+    return 0 if phone_version == PHONE_NUMBERS_VERSION else 1
 
 
 if __name__ == "__main__":
