@@ -18,13 +18,15 @@ REPLAY_PATH = re.compile(r"^/api/v1/missions/([0-9a-f-]{36})/replay$")
 ASSETS = {
     "/": ("index.html", "text/html; charset=utf-8"),
     "/assets/styles.css": ("styles.css", "text/css; charset=utf-8"),
+    "/assets/parity.css": ("parity.css", "text/css; charset=utf-8"),
     "/assets/app.js": ("app.js", "text/javascript; charset=utf-8"),
+    "/assets/parity.js": ("parity.js", "text/javascript; charset=utf-8"),
 }
 
 
 def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
-        server_version = "SherlockOSA/0.6.0"
+        server_version = "SherlockOSA/0.7.0"
         sys_version = ""
 
         def log_message(self, format_string: str, *args: object) -> None:
@@ -153,6 +155,7 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
                         "provider_key_configured": bool(
                             getattr(service.settings, "emailosint_api_key", "")
                         ),
+                        "normalizer": "EMAILOSINT_PARITY_PLUS_V1",
                     }
                 self._json(200, payload)
                 return
