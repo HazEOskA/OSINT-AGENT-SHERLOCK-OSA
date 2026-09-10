@@ -40,6 +40,9 @@ class IsolatedSourceModule(ResearchModule):
 
     Identifier values are sent over stdin instead of argv so they are not exposed in
     the process list. The parent process owns the hard timeout and can kill the worker.
+    Successful normalized results are retained only in-memory for the current case so
+    the Social Graph can combine direct GitHub/GitLab/Holehe/Maigret evidence with
+    EmailOSINT and the dataset-driven Site Probe Engine.
     """
 
     def __init__(self, descriptor: SourceDescriptor) -> None:
@@ -47,6 +50,7 @@ class IsolatedSourceModule(ResearchModule):
         self.name = descriptor.name
         self.supported_kinds = descriptor.supported_kinds
         self.required_capability = descriptor.required_capability
+        self.results: list[dict[str, object]] = []
 
     async def lookup(self, identifier: ResearchIdentifier, context: ModuleContext) -> ModuleResult:
         if identifier.depth > self.descriptor.max_identifier_depth:
@@ -157,10 +161,25 @@ class IsolatedSourceModule(ResearchModule):
             confidence = float(payload.get("confidence", 0.0))
         except (TypeError, ValueError):
             confidence = 0.0
+        confidence = max(0.0, min(1.0, confidence))
+
+        if len(self.results) < 128:
+            self.results.append(
+                {
+                    "source": self.name,
+                    "family": self.descriptor.family,
+                    "identifier_kind": identifier.kind.value,
+                    "identifier_value": identifier.value,
+                    "identifier_depth": identifier.depth,
+                    "fields": dict(fields),
+                    "source_urls": list(source_urls),
+                    "confidence": confidence,
+                }
+            )
 
         return ModuleResult(
             fields=dict(fields),
-            confidence=max(0.0, min(1.0, confidence)),
+            confidence=confidence,
             pivots=tuple(pivots),
             source_urls=source_urls,
         )
