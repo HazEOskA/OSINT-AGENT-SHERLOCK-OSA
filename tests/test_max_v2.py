@@ -73,17 +73,18 @@ def make_finding(
 
 
 class MaxSourceRegistryTests(unittest.TestCase):
-    def test_registry_v2_exposes_new_sources_and_truthful_key_gate(self) -> None:
+    def test_registry_v3_exposes_new_sources_and_truthful_key_gate(self) -> None:
         with patch.dict(os.environ, {}, clear=False):
             health = source_health()
         names = {item["name"] for item in health["sources"]}
-        self.assertEqual(health["registry_version"], "v2")
+        self.assertEqual(health["registry_version"], "v3")
         self.assertIn("gravatar.email", names)
         self.assertIn("github.username", names)
         self.assertIn("gitlab.username", names)
         self.assertIn("rdap.domain", names)
         self.assertIn("commoncrawl.domain", names)
         self.assertIn("hibp.account", names)
+        self.assertIn("socialmesh.username", names)
         hibp = next(item for item in health["sources"] if item["name"] == "hibp.account")
         self.assertTrue(hibp["requires_key"])
 
