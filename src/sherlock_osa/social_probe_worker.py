@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sys
 
-from sherlock_osa.site_probe import run_username_probe
+from sherlock_osa.site_probe_guarded import run_username_probe_guarded
 
 
 PROTOCOL = "sherlock-social-mesh.v3"
@@ -30,7 +30,7 @@ def main() -> int:
         except (TypeError, ValueError) as exc:
             raise ValueError("invalid timeout") from exc
 
-        batch = run_username_probe(
+        batch = run_username_probe_guarded(
             username,
             mode=mode,
             timeout_seconds=max(5.0, min(timeout, 55.0)),
