@@ -30,7 +30,7 @@ from sherlock_osa.service import MissionService
 from sherlock_osa.signing import sha256_json, verify_scope
 from sherlock_osa.social_graph import build_social_graph
 from sherlock_osa.social_mesh import SocialMeshUsernameModule
-from sherlock_osa.source_pack import build_source_modules, source_health
+from sherlock_osa.source_pack import IsolatedSourceModule, build_source_modules, source_health
 
 
 SEARCH_KINDS = frozenset({"AUTO", "EMAIL", "USERNAME", "PERSON", "DOMAIN", "URL", "PHONE"})
@@ -308,10 +308,6 @@ class ResearchMissionService(MissionService):
                 InvestigationMode.MAX: len(candidates),
             }[mode]
             derived_queries = candidates[:candidate_limit]
-            # Only the canonical first candidate is allowed to fan out into the
-            # hundreds-site Social Mesh. Remaining deterministic candidates start
-            # deeper so GitHub/GitLab/Maigret may still check them without multiplying
-            # the expensive site-wide probe by every name variant.
             seeds = tuple(
                 ResearchIdentifier(
                     IdentifierKind.USERNAME,
@@ -384,16 +380,22 @@ class ResearchMissionService(MissionService):
                 break
 
         social_batches: list[dict[str, object]] = []
+        source_records: list[dict[str, object]] = []
         phone_results: list[dict[str, object]] = []
         for module in engine.modules:
             if isinstance(module, SocialMeshUsernameModule):
                 social_batches.extend(module.batches)
             elif isinstance(module, PhoneMetadataModule):
                 phone_results.extend(module.results)
+            elif isinstance(module, IsolatedSourceModule):
+                source_records.extend(module.results)
 
         social_graph = build_social_graph(
             emailosint=emailosint,
-            sensor_payloads={"social_mesh": {"batches": social_batches}},
+            sensor_payloads={
+                "social_mesh": {"batches": social_batches},
+                "source_records": source_records,
+            },
         )
 
         sources = self.research_sources()
@@ -425,9 +427,10 @@ class ResearchMissionService(MissionService):
             "emailosint_error": emailosint_error,
             "social_graph": social_graph,
             "social_mesh": {
-                "version": "v3",
+                "version": "v3.1",
                 "batches": social_batches,
                 "batch_count": len(social_batches),
+                "direct_source_record_count": len(source_records),
                 "datasets": sources.get("social_mesh", {}).get("datasets", [])
                 if isinstance(sources.get("social_mesh"), Mapping)
                 else [],
@@ -455,6 +458,7 @@ class ResearchMissionService(MissionService):
                 ),
                 "phone_metadata_source": "LIBPHONENUMBER_OFFLINE",
                 "social_mesh": "RUNTIME_PINNED_WMN_PLUS_SHERLOCK",
+                "social_graph_direct_sources": ["HOLEHE", "MAIGRET", "GITHUB", "GITLAB", "GRAVATAR"],
                 "social_probe_post_requests": False,
                 "social_probe_authenticated_sessions": False,
                 "social_probe_proxy_rotation": False,
