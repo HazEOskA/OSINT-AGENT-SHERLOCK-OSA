@@ -57,9 +57,18 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn(b"SHERLOCK OSA", body)
         self.assertIn(b'id="search-form"', body)
+        self.assertIn(b'id="email-parity-section"', body)
+        self.assertIn(b'id="email-signals-list"', body)
+        self.assertIn(b'/assets/parity.css', body)
+        self.assertIn(b'/assets/parity.js', body)
         self.assertIn("frame-ancestors 'none'", headers["Content-Security-Policy"])
         self.assertEqual(headers["X-Frame-Options"], "DENY")
-        for path, marker in (("/assets/styles.css", b"--accent"), ("/assets/app.js", b"runSearch")):
+        for path, marker in (
+            ("/assets/styles.css", b"--accent"),
+            ("/assets/parity.css", b".parity-card"),
+            ("/assets/app.js", b"runSearch"),
+            ("/assets/parity.js", b"renderParity"),
+        ):
             asset_status, _, asset_body = self.request_bytes(path)
             self.assertEqual(asset_status, 200)
             self.assertIn(marker, asset_body)
