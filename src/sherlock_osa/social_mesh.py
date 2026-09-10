@@ -37,11 +37,11 @@ class SocialMeshUsernameModule:
     ) -> ModuleResult:
         if identifier.kind is not IdentifierKind.USERNAME:
             raise ValueError("social mesh requires USERNAME")
-        if identifier.depth > 0:
+        if identifier.depth > 1:
             return ModuleResult(
                 fields={
                     "provider": "socialmesh",
-                    "skipped": "CANONICAL_USERNAME_ONLY",
+                    "skipped": "PRIMARY_OR_EMAIL_PIVOT_ONLY",
                     "identifier_depth": identifier.depth,
                 },
                 confidence=0.0,
