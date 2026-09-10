@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Sequence
 
 from sherlock_osa import site_probe
 from sherlock_osa.site_probe import ProbeBatch, SiteDefinition
+
+
+_BASE_LOADER = site_probe.load_site_definitions
 
 
 def _sanitize_definition(definition: SiteDefinition) -> SiteDefinition:
@@ -33,7 +35,7 @@ def _sanitize_definition(definition: SiteDefinition) -> SiteDefinition:
 def load_guarded_definitions(
     timeout_seconds: float = 12.0,
 ) -> tuple[list[SiteDefinition], tuple[dict[str, object], ...]]:
-    definitions, datasets = site_probe.load_site_definitions(timeout_seconds)
+    definitions, datasets = _BASE_LOADER(timeout_seconds)
     sanitized = [_sanitize_definition(definition) for definition in definitions]
     return sanitized, datasets
 
