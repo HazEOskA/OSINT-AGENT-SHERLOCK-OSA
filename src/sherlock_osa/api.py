@@ -8,7 +8,7 @@ from importlib.resources import files
 from typing import Any, Callable
 from urllib.parse import parse_qs, urlsplit
 
-from sherlock_osa.emailosint import EmailOsintClient
+from sherlock_osa.emailosint_truth import TruthEmailOsintClient
 from sherlock_osa.errors import SherlockError
 from sherlock_osa.service import MissionService
 
@@ -155,7 +155,8 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
                         "provider_key_configured": bool(
                             getattr(service.settings, "emailosint_api_key", "")
                         ),
-                        "normalizer": "EMAILOSINT_PARITY_PLUS_V1",
+                        "normalizer": "EMAILOSINT_TRUTH_V4",
+                        "completed_is_found": False,
                     }
                 self._json(200, payload)
                 return
@@ -198,7 +199,7 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
             if path == "/api/v1/lookup/email":
                 if getattr(service.settings, "emailosint_api_key", ""):
                     self._require_auth()
-                client = EmailOsintClient.from_settings(service.settings)
+                client = TruthEmailOsintClient.from_settings(service.settings)
                 self._json(200, client.lookup(self._body_json()))
                 return
 
