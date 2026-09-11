@@ -12,10 +12,15 @@ from sherlock_osa.research import (
     ModuleResult,
     ResearchIdentifier,
 )
+from sherlock_osa.truth_engine import TruthVerdict, confidence_for_presence
 
 
 class EmailOsintResearchModule:
-    """Expose EmailOSINT as one high-value sensor inside the bounded source mesh."""
+    """Expose EmailOSINT as a truth-aware high-value sensor.
+
+    Transport success is not treated as account existence. Only provider signals that
+    the normalizer classified as FOUND may create pivots or a positive source verdict.
+    """
 
     name = "emailosint.email"
     family = "IDENTITY"
@@ -37,18 +42,45 @@ class EmailOsintResearchModule:
             self.client.lookup,
             {"email": identifier.value},
         )
-        pivots = self._extract_pivots(bundle)
-        source_urls = self._extract_urls(bundle)
+        identity = bundle.get("identity", {}) if isinstance(bundle, Mapping) else {}
+        signals = identity.get("signals", []) if isinstance(identity, Mapping) else []
+        found_signals = [
+            signal
+            for signal in signals
+            if isinstance(signal, Mapping)
+            and str(signal.get("status", "")).upper() == TruthVerdict.FOUND.value
+        ] if isinstance(signals, list) else []
+        observed_signals = [
+            signal
+            for signal in signals
+            if isinstance(signal, Mapping)
+            and str(signal.get("status", "")).upper() == TruthVerdict.OBSERVED.value
+        ] if isinstance(signals, list) else []
+
+        verdict = TruthVerdict.FOUND if found_signals else (
+            TruthVerdict.OBSERVED if observed_signals else TruthVerdict.NOT_FOUND
+        )
+        positive_payload = {"linked_accounts": found_signals}
+        pivots = self._extract_pivots(positive_payload)
+        source_urls = self._extract_urls(positive_payload)
         parity = bundle.get("parity", {}) if isinstance(bundle, Mapping) else {}
+        confidence = confidence_for_presence(
+            verdict,
+            base=0.96,
+            checked_count=max(1, len(signals) if isinstance(signals, list) else 0),
+        )
 
         return ModuleResult(
             fields={
                 "provider": "EmailOSINT",
-                "found": True,
+                "found": verdict is TruthVerdict.FOUND,
+                "truth_verdict": verdict.value,
+                "positive_signal_count": len(found_signals),
+                "observed_signal_count": len(observed_signals),
                 "parity": dict(parity) if isinstance(parity, Mapping) else {},
                 "bundle": bundle,
             },
-            confidence=0.96,
+            confidence=confidence,
             pivots=pivots,
             source_urls=source_urls,
         )
@@ -108,60 +140,38 @@ class EmailOsintResearchModule:
             if depth > 7 or len(pivots) >= 192:
                 return
             if isinstance(node, Mapping):
+                # Never pivot from explicitly negative/observed identity signals.
+                status = str(node.get("status", "")).upper()
+                if status and status != TruthVerdict.FOUND.value and (
+                    "provider_payload" in node or "fields" in node
+                ):
+                    return
                 for key, child in list(node.items())[:128]:
                     key_text = str(key).casefold()
                     values = values_of(child)
 
                     if key_text in {
-                        "email",
-                        "emails",
-                        "mail",
-                        "mails",
-                        "public_email",
+                        "email", "emails", "mail", "mails", "public_email",
                     }:
                         for item in values:
                             add(IdentifierKind.EMAIL, item)
                     elif key_text in {
-                        "phone",
-                        "phones",
-                        "telephone",
-                        "mobile",
-                        "phone_number",
+                        "phone", "phones", "telephone", "mobile", "phone_number",
                     }:
                         for item in values:
                             add(IdentifierKind.PHONE, item)
                     elif key_text in {
-                        "username",
-                        "usernames",
-                        "handle",
-                        "handles",
-                        "nickname",
-                        "nick",
-                        "login",
-                        "twitter_username",
+                        "username", "usernames", "handle", "handles", "nickname",
+                        "nick", "login", "twitter_username",
                     }:
                         for item in values:
                             add(IdentifierKind.USERNAME, item)
-                    elif key_text in {
-                        "domain",
-                        "domains",
-                        "host",
-                        "hostname",
-                    }:
+                    elif key_text in {"domain", "domains", "host", "hostname"}:
                         for item in values:
                             add(IdentifierKind.DOMAIN, item)
                     elif key_text in {
-                        "url",
-                        "urls",
-                        "profile_url",
-                        "website",
-                        "websites",
-                        "website_url",
-                        "web_url",
-                        "html_url",
-                        "origin_url",
-                        "link",
-                        "links",
+                        "url", "urls", "profile_url", "website", "websites",
+                        "website_url", "web_url", "html_url", "link", "links",
                     }:
                         for item in values:
                             add(IdentifierKind.URL, item)
@@ -193,6 +203,11 @@ class EmailOsintResearchModule:
                         urls.add(candidate[:2048])
                 return
             if isinstance(node, Mapping):
+                status = str(node.get("status", "")).upper()
+                if status and status != TruthVerdict.FOUND.value and (
+                    "provider_payload" in node or "fields" in node
+                ):
+                    return
                 for child in list(node.values())[:128]:
                     walk(child, depth + 1)
             elif isinstance(node, (list, tuple)):
