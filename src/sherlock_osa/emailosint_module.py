@@ -6,6 +6,7 @@ from collections.abc import Mapping, Sequence
 from urllib.parse import urlsplit
 
 from sherlock_osa.emailosint import EmailOsintClient
+from sherlock_osa.emailosint_truth import enforce_emailosint_truth
 from sherlock_osa.research import (
     IdentifierKind,
     ModuleContext,
@@ -42,6 +43,7 @@ class EmailOsintResearchModule:
             self.client.lookup,
             {"email": identifier.value},
         )
+        bundle = enforce_emailosint_truth(bundle)
         identity = bundle.get("identity", {}) if isinstance(bundle, Mapping) else {}
         signals = identity.get("signals", []) if isinstance(identity, Mapping) else []
         found_signals = [
