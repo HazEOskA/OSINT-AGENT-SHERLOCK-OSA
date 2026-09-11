@@ -28,14 +28,15 @@ class IdentityCluster:
 
 
 class IdentityResolver:
-    """Conservative identity clustering.
+    """Truth Engine V4 conservative identity clustering.
 
-    V2 never merges entities from name/username similarity alone. Clusters require
-    explicit evidence relations or the same hard source URL. This keeps identity
-    claims separate from mere source observations.
+    A research pivot is a search path, not an identity assertion. In particular,
+    deriving a username from an email local-part or generating PERSON username
+    candidates must never merge those entities. Clusters therefore require a strong
+    OBSERVED_IN relation from positive evidence or the exact same hard source URL.
     """
 
-    _linkable_relations = frozenset({"PIVOT", "OBSERVED_IN"})
+    _linkable_relations = frozenset({"OBSERVED_IN"})
 
     def resolve(
         self,
@@ -68,7 +69,7 @@ class IdentityResolver:
         for relation in relations:
             if relation.relation_type not in self._linkable_relations:
                 continue
-            if relation.confidence < 0.75:
+            if relation.confidence < 0.80:
                 continue
             union(
                 relation.from_finding_id,
@@ -81,7 +82,7 @@ class IdentityResolver:
             for source in finding.sources:
                 if source.url:
                     url_to_findings.setdefault(source.url, set()).add(finding.finding_id)
-        for url, finding_ids in url_to_findings.items():
+        for _url, finding_ids in url_to_findings.items():
             ordered = sorted(finding_ids)
             if len(ordered) < 2:
                 continue
@@ -112,12 +113,17 @@ class IdentityResolver:
                     if source.source_family
                 }
             )
-            relation_bonus = min(0.25, 0.08 * len(reasons))
-            family_bonus = min(0.15, 0.05 * max(0, len(families) - 1))
-            confidence = round(min(0.95, 0.55 + relation_bonus + family_bonus), 4)
-            if confidence >= 0.80 and len(families) >= 2:
+            hard_url_reason = "SAME_HARD_SOURCE_URL" in reasons
+            relation_bonus = min(0.20, 0.08 * len(reasons))
+            family_bonus = min(0.12, 0.04 * max(0, len(families) - 1))
+            hard_url_bonus = 0.12 if hard_url_reason else 0.0
+            confidence = round(
+                min(0.95, 0.52 + relation_bonus + family_bonus + hard_url_bonus),
+                4,
+            )
+            if confidence >= 0.82 and len(families) >= 2 and hard_url_reason:
                 status = "STRONG"
-            elif confidence >= 0.65:
+            elif confidence >= 0.68:
                 status = "SUPPORTED"
             else:
                 status = "WEAK"
