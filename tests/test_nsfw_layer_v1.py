@@ -29,12 +29,18 @@ class SensitiveTaxonomyTests(unittest.TestCase):
 class SensitiveGraphTests(unittest.TestCase):
     def test_sensitive_layer_is_separate_collapsed_and_evidence_first(self) -> None:
         emailosint = {
-            "identity": {"signals": []},
-            "provider": {
-                "events": [
+            "identity": {
+                "signals": [
                     {
-                        "event": "creator_probe",
-                        "data": {
+                        "source": "OnlyFans",
+                        "status": "FOUND",
+                        "fields": {
+                            "service": "OnlyFans",
+                            "found": True,
+                            "username": "osa",
+                            "profile_url": "https://onlyfans.example/osa",
+                        },
+                        "provider_payload": {
                             "service": "OnlyFans",
                             "found": True,
                             "username": "osa",
@@ -42,38 +48,50 @@ class SensitiveGraphTests(unittest.TestCase):
                         },
                     },
                     {
-                        "event": "adult_probe",
-                        "data": {
+                        "source": "Pornhub",
+                        "status": "BLOCKED",
+                        "fields": {
                             "service": "Pornhub",
-                            "status": "blocked",
+                            "username": "osa",
+                            "profile_url": "https://pornhub.example/users/osa",
+                        },
+                        "provider_payload": {
+                            "service": "Pornhub",
                             "username": "osa",
                             "profile_url": "https://pornhub.example/users/osa",
                         },
                     },
                     {
-                        "event": "negative_probe",
-                        "data": {
+                        "source": "Fansly",
+                        "status": "NOT_FOUND",
+                        "fields": {
+                            "service": "Fansly",
+                            "not_found": True,
+                            "username": "missing-osa",
+                            "profile_url": "https://fansly.example/missing-osa",
+                        },
+                        "provider_payload": {
                             "service": "Fansly",
                             "not_found": True,
                             "username": "missing-osa",
                             "profile_url": "https://fansly.example/missing-osa",
                         },
                     },
-                ],
-                "raw": {},
+                ]
             },
+            "provider": {"events": [], "raw": {}},
         }
 
         graph = build_social_graph(emailosint=emailosint, sensor_payloads={})
         sensitive = graph["sensitive_intelligence"]
 
-        self.assertEqual(graph["version"], "v3.2")
-        self.assertEqual(sensitive["version"], "v1")
+        self.assertEqual(graph["version"], "v4")
+        self.assertEqual(sensitive["version"], "v1-truth-v4")
         self.assertTrue(sensitive["default_collapsed"])
         self.assertEqual(sensitive["placement"], "CASE_REPORT_BOTTOM")
         self.assertFalse(sensitive["media_autoload"])
         self.assertTrue(sensitive["truth"]["same_username_is_not_same_person"])
-        self.assertTrue(sensitive["truth"]["found_requires_source_signal"])
+        self.assertTrue(sensitive["truth"]["found_requires_truth_verified_source_signal"])
         self.assertFalse(sensitive["truth"]["explicit_media_autoload"])
 
         accounts = sensitive["accounts"]
