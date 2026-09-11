@@ -62,6 +62,10 @@ def main() -> int:
         "phonenumbers_pinned",
         '"phonenumbers==9.0.38"' in pyproject,
     ))
+    checks.append((
+        "maigret_truth_version_pinned",
+        '"maigret==0.6.5"' in pyproject,
+    ))
 
     parser = UiContractParser()
     parser.feed((SRC / "sherlock_osa" / "web" / "index.html").read_text(encoding="utf-8"))
@@ -107,7 +111,12 @@ def main() -> int:
     parity_javascript_source = (SRC / "sherlock_osa" / "web" / "parity.js").read_text(encoding="utf-8")
     research_service = (SRC / "sherlock_osa" / "research_service.py").read_text(encoding="utf-8")
     site_probe = (SRC / "sherlock_osa" / "site_probe.py").read_text(encoding="utf-8")
+    guarded_probe = (SRC / "sherlock_osa" / "site_probe_guarded.py").read_text(encoding="utf-8")
+    source_registry = (SRC / "sherlock_osa" / "source_registry.py").read_text(encoding="utf-8")
     social_graph = (SRC / "sherlock_osa" / "social_graph.py").read_text(encoding="utf-8")
+    truth_engine = (SRC / "sherlock_osa" / "truth_engine.py").read_text(encoding="utf-8")
+    truth_correlation = (SRC / "sherlock_osa" / "truth_correlation.py").read_text(encoding="utf-8")
+    emailosint_truth = (SRC / "sherlock_osa" / "emailosint_truth.py").read_text(encoding="utf-8")
 
     checks.append(("ui_hidden_contract", "[hidden] { display: none !important; }" in styles))
     checks.append(("ui_primary_lookup_route", '"/api/v1/search/stream"' in javascript_source))
@@ -116,7 +125,7 @@ def main() -> int:
         "renderParity" in parity_javascript_source and ".parity-card" in parity_styles,
     ))
     checks.append((
-        "ui_social_graph_v3_contract",
+        "ui_social_graph_truth_contract",
         "renderSocialGraph" in parity_javascript_source
         and "social-graph-section" in parity_javascript_source
         and "DATING" in parity_javascript_source
@@ -124,12 +133,15 @@ def main() -> int:
     ))
     checks.append((
         "social_mesh_runtime_dataset_pins",
-        "e62338e4fc88536a330733d355a9d33a3a1697c6" in site_probe
+        "ea7dcef44ad5706650932347856855a21f6b99af" in guarded_probe
+        and "ea7dcef44ad5706650932347856855a21f6b99af" in source_registry
         and "376018708c0f6948d3f978a9ae2915024e794654" in site_probe,
     ))
     checks.append((
         "social_mesh_guardrails",
         'method.upper() not in {"GET", "HEAD"}' in site_probe
+        and "detect_interstitial" in guarded_probe
+        and "NEGATIVE_CANARY_FAILED" in guarded_probe
         and '"captcha_bypass": False' in site_probe
         and '"authenticated_sessions_used": False' in site_probe,
     ))
@@ -142,7 +154,27 @@ def main() -> int:
     checks.append((
         "social_graph_truth_contract",
         '"same_username_is_not_same_person": True' in social_graph
-        and '"found_requires_source_signal": True' in social_graph,
+        and '"found_requires_truth_verified_source_signal": True' in social_graph
+        and '"raw_provider_payload_is_account_evidence": False' in social_graph,
+    ))
+    checks.append((
+        "truth_engine_core_contract",
+        "class TruthVerdict" in truth_engine
+        and "completed_is_found" not in truth_engine
+        and "detect_interstitial" in truth_engine
+        and "mechanism_key" in truth_engine,
+    ))
+    checks.append((
+        "truth_correlation_contract",
+        "TruthCorrelationEngine" in truth_correlation
+        and "mechanism_key" in truth_correlation
+        and "_evidence_is_positive" in truth_correlation,
+    ))
+    checks.append((
+        "emailosint_truth_contract",
+        "TruthEmailOsintClient" in emailosint_truth
+        and "observed_is_linked_account" in emailosint_truth
+        and "EMAILOSINT_RATE_LIMITED" in emailosint_truth,
     ))
 
     node = shutil.which("node")
