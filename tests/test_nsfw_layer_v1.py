@@ -54,7 +54,7 @@ class SensitiveGraphTests(unittest.TestCase):
                         "event": "negative_probe",
                         "data": {
                             "service": "Fansly",
-                            "found": False,
+                            "not_found": True,
                             "username": "missing-osa",
                             "profile_url": "https://fansly.example/missing-osa",
                         },
