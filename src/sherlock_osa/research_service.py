@@ -31,6 +31,7 @@ from sherlock_osa.signing import sha256_json, verify_scope
 from sherlock_osa.social_graph import build_social_graph
 from sherlock_osa.social_mesh import SocialMeshUsernameModule
 from sherlock_osa.source_pack import IsolatedSourceModule, build_source_modules, source_health
+from sherlock_osa.truth_correlation import TruthCorrelationEngine
 
 
 SEARCH_KINDS = frozenset({"AUTO", "EMAIL", "USERNAME", "PERSON", "DOMAIN", "URL", "PHONE"})
@@ -195,9 +196,9 @@ class ResearchMissionService(MissionService):
         return {
             **base,
             "execution_backing": (
-                "SIMULATION_PLUS_SOCIAL_MESH_ULTRA_V3"
+                "SIMULATION_PLUS_SHERLOCK_TRUTH_ENGINE_V4"
                 if full_pack
-                else "SIMULATION_PLUS_PARTIAL_SOCIAL_MESH_ULTRA_V3"
+                else "SIMULATION_PLUS_PARTIAL_SHERLOCK_TRUTH_ENGINE_V4"
             ),
             "research": research,
             "search": {
@@ -217,8 +218,9 @@ class ResearchMissionService(MissionService):
                 ),
                 "default_mode": "MAX",
                 "modes": ["QUICK", "DEEP", "MAX"],
-                "presentation": "HUMAN_REPORT_WITH_SOCIAL_GRAPH_AND_SOURCE_LINKS",
-                "social_mesh": "V3_RUNTIME_PINNED_DATASETS",
+                "presentation": "HUMAN_REPORT_WITH_TRUTH_PROVENANCE_AND_SOURCE_LINKS",
+                "social_mesh": "V4_RUNTIME_PINNED_DATASETS_WITH_CANARY_QUARANTINE",
+                "truth_engine": "V4",
             },
         }
 
@@ -257,7 +259,7 @@ class ResearchMissionService(MissionService):
                 for mode in InvestigationMode
             },
             "truth": (
-                "DEPENDENCIES_VERIFIED; live source reachability is evaluated per lookup."
+                "DEPENDENCIES_VERIFIED; runtime truth is evaluated by explicit presence semantics, canaries and provenance dedupe."
                 if health["all_dependencies_available"] and health["all_versions_pinned"]
                 else "SOURCE_PACK_DEGRADED; one or more pinned dependencies are unavailable or drifted."
             ),
@@ -346,7 +348,10 @@ class ResearchMissionService(MissionService):
                 if getattr(module, "required_capability", "")
             }
         )
-        investigator = DetectiveInvestigator(engine)
+        investigator = DetectiveInvestigator(
+            engine,
+            correlation_engine=TruthCorrelationEngine(),
+        )
 
         if event_sink:
             event_sink(
@@ -356,6 +361,7 @@ class ResearchMissionService(MissionService):
                     "mode": mode.name,
                     "seed_count": len(seeds),
                     "social_mesh": True,
+                    "truth_engine": "V4",
                 },
             )
 
@@ -427,7 +433,8 @@ class ResearchMissionService(MissionService):
             "emailosint_error": emailosint_error,
             "social_graph": social_graph,
             "social_mesh": {
-                "version": "v3.1",
+                "version": "v4",
+                "truth_engine": "V4",
                 "batches": social_batches,
                 "batch_count": len(social_batches),
                 "direct_source_record_count": len(source_records),
@@ -448,16 +455,23 @@ class ResearchMissionService(MissionService):
             "detective": investigation.to_dict(),
             "sources": sources,
             "truth": {
+                "engine": "SHERLOCK_TRUTH_ENGINE_V4",
                 "mode": "BOUNDED_PASSIVE",
                 "search_mode": mode.name,
                 "operator_auth_required": True,
                 "fabricated_results": False,
+                "completed_is_found": False,
+                "http_200_is_found": False,
+                "same_username_is_same_person": False,
+                "aggregator_duplicates_are_independent": False,
+                "negative_canary_required": True,
+                "waf_interstitial_is_found": False,
                 "phone_backing": bool(phone_results) or bool(hibp.get("ready")),
                 "phone_exposure_source": (
                     "HIBP_ACCOUNT" if bool(hibp.get("ready")) else "UNAVAILABLE_NO_HIBP_KEY"
                 ),
                 "phone_metadata_source": "LIBPHONENUMBER_OFFLINE",
-                "social_mesh": "RUNTIME_PINNED_WMN_PLUS_SHERLOCK",
+                "social_mesh": "RUNTIME_PINNED_WMN_PLUS_SHERLOCK_WITH_CANARY",
                 "social_graph_direct_sources": ["HOLEHE", "MAIGRET", "GITHUB", "GITLAB", "GRAVATAR"],
                 "social_probe_post_requests": False,
                 "social_probe_authenticated_sessions": False,
@@ -484,6 +498,7 @@ class ResearchMissionService(MissionService):
                     "headline": report["headline"],
                     "summary": report["summary"],
                     "mode": mode.name,
+                    "truth_engine": "V4",
                 },
             )
         return result
