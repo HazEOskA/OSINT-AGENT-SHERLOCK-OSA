@@ -3,7 +3,15 @@ from __future__ import annotations
 import unittest
 
 from sherlock_osa.emailosint_module import EmailOsintResearchModule
-from sherlock_osa.findings import AssertionLevel, FindingStatus
+from sherlock_osa.emailosint_truth import enforce_emailosint_truth
+from sherlock_osa.findings import (
+    AssertionLevel,
+    Finding,
+    FindingStatus,
+    Relation,
+    stable_finding_id,
+)
+from sherlock_osa.identity import IdentityResolver
 from sherlock_osa.research import (
     IdentifierKind,
     ModuleContext,
@@ -13,6 +21,7 @@ from sherlock_osa.research import (
 )
 from sherlock_osa.site_probe import ProbeVerdict, SiteDefinition
 from sherlock_osa.site_probe_guarded import _truth_evaluate
+from sherlock_osa.social_graph import build_social_graph
 from sherlock_osa.truth_correlation import TruthCorrelationEngine
 from sherlock_osa.truth_engine import (
     TruthVerdict,
@@ -138,6 +147,62 @@ class TruthCorrelationTests(unittest.TestCase):
         self.assertEqual(username.source_count, 1)
 
 
+class IdentityTruthTests(unittest.TestCase):
+    @staticmethod
+    def _finding(kind: str, value: str) -> Finding:
+        return Finding(
+            finding_id=stable_finding_id(kind, value),
+            kind=kind,
+            value=value,
+            title=f"{kind}: {value}",
+            status=FindingStatus.POSSIBLE,
+            assertion=AssertionLevel.HYPOTHESIS,
+            confidence=0.7,
+            source_count=1,
+            sources=(),
+        )
+
+    def test_search_pivot_does_not_merge_identity(self) -> None:
+        email = self._finding("EMAIL", "alice@example.com")
+        username = self._finding("USERNAME", "alice")
+        pivot = Relation(
+            relation_type="PIVOT",
+            from_finding_id=email.finding_id,
+            to_finding_id=username.finding_id,
+            evidence_ids=("e1", "e2"),
+            confidence=0.99,
+        )
+        clusters = IdentityResolver().resolve((email, username), (pivot,))
+        self.assertEqual(clusters, ())
+
+
+class SocialGraphTruthTests(unittest.TestCase):
+    def test_raw_emailosint_provider_payload_cannot_create_account_claim(self) -> None:
+        emailosint = {
+            "identity": {"signals": []},
+            "provider": {
+                "raw": {
+                    "service": "GitHub",
+                    "username": "alice",
+                    "profile_url": "https://github.com/alice",
+                },
+                "events": [
+                    {
+                        "event": "metadata",
+                        "data": {
+                            "service": "Instagram",
+                            "username": "alice",
+                            "profile_url": "https://instagram.com/alice",
+                        },
+                    }
+                ],
+            },
+        }
+        graph = build_social_graph(emailosint=emailosint, sensor_payloads={})
+        self.assertEqual(graph["accounts"], [])
+        self.assertEqual(graph["summary"]["found_total"], 0)
+
+
 class _FakeEmailClient:
     def __init__(self, bundle: dict[str, object]) -> None:
         self.bundle = bundle
@@ -147,6 +212,26 @@ class _FakeEmailClient:
 
 
 class EmailOsintTruthTests(unittest.IsolatedAsyncioTestCase):
+    def test_observed_signal_is_not_linked_account(self) -> None:
+        bundle = {
+            "identity": {
+                "signals": [
+                    {"source": "github", "status": "FOUND", "fields": {"username": "good"}},
+                    {"source": "x", "status": "OBSERVED", "fields": {"username": "maybe"}},
+                ],
+                "linked_accounts": [],
+                "counts": {},
+            },
+            "exposure": {"counts": {}},
+            "parity": {},
+            "verification": {},
+        }
+        fixed = enforce_emailosint_truth(bundle)
+        linked = fixed["identity"]["linked_accounts"]
+        self.assertEqual(len(linked), 1)
+        self.assertEqual(linked[0]["source"], "github")
+        self.assertEqual(fixed["truth"]["observed_identity_signals"], 1)
+
     async def test_observed_email_signal_does_not_become_found_or_pivot(self) -> None:
         bundle = {
             "identity": {
@@ -157,9 +242,12 @@ class EmailOsintTruthTests(unittest.IsolatedAsyncioTestCase):
                         "fields": {"username": "alice"},
                         "provider_payload": {"username": "alice"},
                     }
-                ]
+                ],
+                "counts": {},
             },
+            "exposure": {"counts": {}},
             "parity": {},
+            "verification": {},
         }
         module = EmailOsintResearchModule(_FakeEmailClient(bundle))  # type: ignore[arg-type]
         result = await module.lookup(
