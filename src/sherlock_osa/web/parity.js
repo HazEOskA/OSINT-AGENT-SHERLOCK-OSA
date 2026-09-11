@@ -16,9 +16,24 @@
     "SHOPPING",
     "FINANCE",
     "FORUMS",
-    "ADULT",
     "OTHER",
   ];
+  const SENSITIVE_BUCKET_ORDER = [
+    "CREATOR_PLATFORMS",
+    "ADULT_COMMUNITIES",
+    "DATING_SEXUAL_OVERLAP",
+    "LINK_IN_BIO_MONETIZATION",
+    "HISTORICAL_ARCHIVE",
+    "OTHER_ADULT",
+  ];
+  const SENSITIVE_BUCKET_LABELS = {
+    CREATOR_PLATFORMS: "Creator platforms",
+    ADULT_COMMUNITIES: "Adult communities / forums",
+    DATING_SEXUAL_OVERLAP: "Dating / sexual-social overlap",
+    LINK_IN_BIO_MONETIZATION: "Link-in-bio / monetization",
+    HISTORICAL_ARCHIVE: "Historical / archive evidence",
+    OTHER_ADULT: "Other sensitive public signals",
+  };
 
   function valueText(value) {
     if (value === null) return "null";
@@ -30,7 +45,6 @@
 
   function flatten(value, prefix = "", output = [], depth = 0) {
     if (output.length >= MAX_FIELD_ROWS || depth > 8) return output;
-
     if (
       value === null ||
       value === undefined ||
@@ -41,18 +55,15 @@
       if (prefix) output.push([prefix, valueText(value)]);
       return output;
     }
-
     if (Array.isArray(value)) {
       value.slice(0, 128).forEach((item, index) => {
         flatten(item, prefix ? `${prefix}[${index}]` : `[${index}]`, output, depth + 1);
       });
       return output;
     }
-
     if (typeof value === "object") {
       Object.entries(value).slice(0, 256).forEach(([key, child]) => {
-        const next = prefix ? `${prefix}.${key}` : key;
-        flatten(child, next, output, depth + 1);
+        flatten(child, prefix ? `${prefix}.${key}` : key, output, depth + 1);
       });
     }
     return output;
@@ -94,7 +105,6 @@
       container.append(empty);
       return;
     }
-
     for (const [key, rawValue] of rows) {
       const row = document.createElement("div");
       row.className = "parity-field";
@@ -126,7 +136,6 @@
     items.slice(0, MAX_SIGNAL_CARDS).forEach((item, index) => {
       const card = document.createElement("article");
       card.className = `parity-card parity-${type}`;
-
       const head = document.createElement("div");
       head.className = "parity-card-head";
       const titleWrap = document.createElement("div");
@@ -146,21 +155,14 @@
         const status = document.createElement("b");
         const state = String(item.status || "OBSERVED");
         status.className = `parity-status parity-status-${state.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
-        status.textContent = state === "FOUND"
-          ? "ZNALEZIONE"
-          : state === "NOT_FOUND"
-            ? "BRAK"
-            : "SYGNAŁ";
+        status.textContent = state === "FOUND" ? "ZNALEZIONE" : state === "NOT_FOUND" ? "BRAK" : "SYGNAŁ";
         head.append(titleWrap, status);
       } else {
         head.append(titleWrap);
       }
       card.append(head);
 
-      const bodyValue = type === "signal"
-        ? (item.provider_payload || item.fields || item)
-        : item;
-
+      const bodyValue = type === "signal" ? (item.provider_payload || item.fields || item) : item;
       const fields = document.createElement("div");
       fields.className = "parity-fields";
       renderFieldRows(fields, bodyValue);
@@ -172,14 +174,12 @@
           ...collectUrls(bodyValue),
         ]),
       ].filter((url) => typeof url === "string" && /^https?:\/\//i.test(url));
-
       if (urls.length) {
         const links = document.createElement("div");
         links.className = "parity-links";
         urls.slice(0, 30).forEach((url) => links.append(makeLink(url)));
         card.append(links);
       }
-
       container.append(card);
     });
   }
@@ -206,26 +206,29 @@
     $("#email-ai-headline").textContent = headline || "Brak syntezy AI od EmailOSINT.";
     $("#email-ai-summary").textContent = ai.summary || headline || "";
     $("#email-ai-reason").textContent = ai.reason || emailosint.risk && emailosint.risk.reason || "Brak dodatkowego uzasadnienia providera.";
-
     const risk = ai.risk || emailosint.risk && emailosint.risk.level;
     $("#email-ai-risk").textContent = risk ? String(risk).toUpperCase() : "UNKNOWN";
-
-    const payload = $("#email-ai-payload");
-    renderFieldRows(payload, ai.payload || {}, { empty: "Provider nie zwrócił dodatkowych pól AI." });
+    renderFieldRows(
+      $("#email-ai-payload"),
+      ai.payload || {},
+      { empty: "Provider nie zwrócił dodatkowych pól AI." }
+    );
   }
 
   function renderMeta(emailosint) {
     const timeline = emailosint.timeline || {};
     $("#email-first-seen").textContent = timeline.first_seen || "—";
     $("#email-last-seen").textContent = timeline.last_seen || "—";
-    const meta = $("#email-meta-fields");
-    renderFieldRows(meta, timeline.meta || {}, { empty: "Brak dodatkowych metadanych." });
+    renderFieldRows(
+      $("#email-meta-fields"),
+      timeline.meta || {},
+      { empty: "Brak dodatkowych metadanych." }
+    );
   }
 
   function renderParity(emailosint) {
     const section = $("#email-parity-section");
     if (!section) return;
-
     if (!emailosint) {
       section.hidden = true;
       return;
@@ -269,16 +272,13 @@
     renderCards($("#email-signals-list"), identity.signals || [], "signal");
     renderCards($("#email-breach-parity-list"), exposure.breaches || [], "breach");
     renderCards($("#email-stealer-parity-list"), exposure.infostealer || [], "infostealer");
-
-    const breachSummary = $("#email-breach-summary-fields");
     renderFieldRows(
-      breachSummary,
+      $("#email-breach-summary-fields"),
       exposure.breach_summary || {},
       { empty: "Brak zbiorczych metadanych breach." }
     );
-    const stealerSummary = $("#email-stealer-summary-fields");
     renderFieldRows(
-      stealerSummary,
+      $("#email-stealer-summary-fields"),
       exposure.infostealer_summary || {},
       { empty: "Brak zbiorczych metadanych infostealera." }
     );
@@ -319,15 +319,14 @@
 
     const stats = document.createElement("div");
     stats.className = "email-parity-grid";
-    const statDefs = [
+    [
       ["social-total", "SYGNAŁY", "0"],
       ["social-found", "ZNALEZIONE", "0"],
       ["social-google", "GOOGLE", "0"],
       ["social-dating", "DATING", "0"],
       ["social-social", "SOCIAL", "0"],
       ["social-messaging", "MESSAGING", "0"],
-    ];
-    statDefs.forEach(([id, label, value]) => {
+    ].forEach(([id, label, value]) => {
       const card = document.createElement("article");
       const labelEl = document.createElement("span");
       labelEl.textContent = label;
@@ -364,12 +363,8 @@
 
     const paritySection = $("#email-parity-section");
     const anchor = paritySection && paritySection.nextElementSibling;
-    if (anchor && anchor.parentNode) {
-      anchor.parentNode.insertBefore(section, anchor);
-    } else {
-      const result = $("#result");
-      if (result) result.append(section);
-    }
+    if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(section, anchor);
+    else if ($("#result")) $("#result").append(section);
     return section;
   }
 
@@ -380,12 +375,16 @@
     if (state === "RATE_LIMITED") return "RATE LIMIT";
     if (state === "BLOCKED") return "ZABLOKOWANE";
     if (state === "UNRELIABLE") return "NIEWIARYGODNE";
+    if (state === "TIMEOUT") return "TIMEOUT";
+    if (state === "ERROR") return "BŁĄD";
     return state;
   }
 
-  function renderSocialAccountCard(account) {
+  function renderSocialAccountCard(account, sensitive = false) {
     const card = document.createElement("article");
-    card.className = "parity-card parity-signal";
+    card.className = sensitive
+      ? "parity-card parity-signal sensitive-signal-card"
+      : "parity-card parity-signal";
 
     const head = document.createElement("div");
     head.className = "parity-card-head";
@@ -408,6 +407,8 @@
     const compact = {
       username: account.username || undefined,
       kategoria: account.category || undefined,
+      warstwa: account.sensitive_bucket || undefined,
+      poziom_dowodu: account.evidence_tier || undefined,
       pewnosc_dowodowa: typeof account.confidence === "number"
         ? `${Math.round(account.confidence * 100)}%`
         : undefined,
@@ -429,10 +430,163 @@
     return card;
   }
 
+  function ensureSensitiveSection() {
+    let section = $("#sensitive-intelligence-section");
+    if (section) return section;
+
+    section = document.createElement("section");
+    section.className = "report-section sensitive-intelligence-section";
+    section.id = "sensitive-intelligence-section";
+    section.hidden = true;
+
+    const shell = document.createElement("details");
+    shell.className = "sensitive-intelligence-shell";
+    shell.id = "sensitive-intelligence-shell";
+
+    const shellSummary = document.createElement("summary");
+    shellSummary.className = "sensitive-intelligence-summary";
+    const titleWrap = document.createElement("div");
+    const eyebrow = document.createElement("span");
+    eyebrow.textContent = "⚠ SENSITIVE INTELLIGENCE";
+    const title = document.createElement("strong");
+    title.id = "sensitive-intelligence-title";
+    title.textContent = "NSFW / ADULT — CLICK TO REVEAL";
+    titleWrap.append(eyebrow, title);
+    const count = document.createElement("b");
+    count.id = "sensitive-intelligence-count";
+    count.textContent = "0 SIGNALS";
+    shellSummary.append(titleWrap, count);
+    shell.append(shellSummary);
+
+    const body = document.createElement("div");
+    body.className = "sensitive-intelligence-body";
+
+    const truth = document.createElement("article");
+    truth.className = "sensitive-truth-card";
+    const truthTitle = document.createElement("strong");
+    truthTitle.textContent = "EVIDENCE BOUNDARY";
+    const truthText = document.createElement("p");
+    truthText.textContent = "To są publiczne sygnały źródłowe. Sama zgodność username nie dowodzi, że profile należą do tej samej osoby. Treści graficzne nie są automatycznie pobierane ani wyświetlane.";
+    truth.append(truthTitle, truthText);
+    body.append(truth);
+
+    const stats = document.createElement("div");
+    stats.className = "sensitive-stats";
+    [
+      ["sensitive-found", "FOUND"],
+      ["sensitive-direct", "DIRECT PUBLIC"],
+      ["sensitive-observed", "OBSERVED"],
+      ["sensitive-limited", "BLOCKED / LIMITED"],
+    ].forEach(([id, label]) => {
+      const card = document.createElement("article");
+      const labelEl = document.createElement("span");
+      labelEl.textContent = label;
+      const valueEl = document.createElement("strong");
+      valueEl.id = id;
+      valueEl.textContent = "0";
+      card.append(labelEl, valueEl);
+      stats.append(card);
+    });
+    body.append(stats);
+
+    const buckets = document.createElement("div");
+    buckets.id = "sensitive-bucket-list";
+    buckets.className = "sensitive-bucket-list";
+    body.append(buckets);
+    shell.append(body);
+    section.append(shell);
+
+    const result = $("#result");
+    const raw = result && result.querySelector(".raw-result");
+    if (result && raw) result.insertBefore(section, raw);
+    else if (result) result.append(section);
+    return section;
+  }
+
+  function fallbackSensitive(graph) {
+    const adult = graph && graph.categories && Array.isArray(graph.categories.ADULT)
+      ? graph.categories.ADULT.filter((item) => item.status !== "NOT_FOUND")
+      : [];
+    return {
+      default_collapsed: true,
+      media_autoload: false,
+      accounts: adult,
+      sections: { OTHER_ADULT: adult },
+      summary: {
+        signals_total: adult.length,
+        found_total: adult.filter((item) => item.status === "FOUND").length,
+        direct_public_profiles: adult.filter((item) => item.status === "FOUND" && item.profile_url).length,
+        observed_total: adult.filter((item) => item.status === "OBSERVED").length,
+        blocked_total: adult.filter((item) => item.status === "BLOCKED").length,
+        rate_limited_total: adult.filter((item) => item.status === "RATE_LIMITED").length,
+        unreliable_total: adult.filter((item) => item.status === "UNRELIABLE").length,
+      },
+    };
+  }
+
+  function renderSensitiveIntelligence(graph) {
+    const section = ensureSensitiveSection();
+    const sensitive = graph && graph.sensitive_intelligence
+      ? graph.sensitive_intelligence
+      : fallbackSensitive(graph || {});
+    const accounts = Array.isArray(sensitive.accounts) ? sensitive.accounts : [];
+    if (!accounts.length) {
+      section.hidden = true;
+      $("#sensitive-intelligence-shell").open = false;
+      return;
+    }
+
+    section.hidden = false;
+    const summary = sensitive.summary || {};
+    $("#sensitive-intelligence-count").textContent = `${summary.signals_total || accounts.length} SIGNALS`;
+    $("#sensitive-found").textContent = String(summary.found_total || 0);
+    $("#sensitive-direct").textContent = String(summary.direct_public_profiles || 0);
+    $("#sensitive-observed").textContent = String(summary.observed_total || 0);
+    $("#sensitive-limited").textContent = String(
+      (summary.blocked_total || 0) +
+      (summary.rate_limited_total || 0) +
+      (summary.unreliable_total || 0)
+    );
+
+    const container = $("#sensitive-bucket-list");
+    container.replaceChildren();
+    const sections = sensitive.sections || {};
+
+    SENSITIVE_BUCKET_ORDER.forEach((bucket) => {
+      const items = Array.isArray(sections[bucket]) ? sections[bucket] : [];
+      if (!items.length) return;
+
+      const details = document.createElement("details");
+      details.className = "sensitive-bucket";
+      const bucketSummary = document.createElement("summary");
+      const label = document.createElement("span");
+      label.textContent = SENSITIVE_BUCKET_LABELS[bucket] || bucket;
+      const count = document.createElement("b");
+      count.textContent = `${items.length} signals`;
+      bucketSummary.append(label, count);
+      details.append(bucketSummary);
+
+      const cards = document.createElement("div");
+      cards.className = "parity-card-list sensitive-card-list";
+      [...items]
+        .sort((a, b) => {
+          const aFound = a.status === "FOUND" ? 0 : 1;
+          const bFound = b.status === "FOUND" ? 0 : 1;
+          if (aFound !== bFound) return aFound - bFound;
+          return Number(b.confidence || 0) - Number(a.confidence || 0);
+        })
+        .slice(0, 160)
+        .forEach((account) => cards.append(renderSocialAccountCard(account, true)));
+      details.append(cards);
+      container.append(details);
+    });
+  }
+
   function renderSocialGraph(graph) {
     const section = ensureSocialSection();
     if (!graph || !Array.isArray(graph.accounts)) {
       section.hidden = true;
+      renderSensitiveIntelligence(null);
       return;
     }
     section.hidden = false;
@@ -454,16 +608,8 @@
       const visible = items.filter((item) => item.status !== "NOT_FOUND");
       if (!visible.length) return;
 
-      const block = category === "ADULT"
-        ? document.createElement("details")
-        : document.createElement("section");
+      const block = document.createElement("section");
       block.className = "parity-section-block";
-      if (category === "ADULT") {
-        const summaryEl = document.createElement("summary");
-        summaryEl.textContent = `ADULT / NSFW — ${visible.length} sygnałów`;
-        block.append(summaryEl);
-      }
-
       const header = document.createElement("header");
       const copy = document.createElement("div");
       const subtitle = document.createElement("span");
@@ -503,6 +649,8 @@
       chip.textContent = text;
       meta.append(chip);
     });
+
+    renderSensitiveIntelligence(graph);
   }
 
   function tryRenderFromRaw() {
@@ -523,6 +671,7 @@
     const raw = $("#result-json");
     if (!raw) return;
     ensureSocialSection();
+    ensureSensitiveSection();
     const observer = new MutationObserver(tryRenderFromRaw);
     observer.observe(raw, { childList: true, characterData: true, subtree: true });
     tryRenderFromRaw();
