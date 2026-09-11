@@ -69,6 +69,7 @@ class SourceDescriptor:
 
     def health(self) -> dict[str, object]:
         available, version, version_match = self.dependency_health()
+        configuration_ready = available and version_match and self.credential_configured
         return {
             "name": self.name,
             "family": self.family,
@@ -94,7 +95,10 @@ class SourceDescriptor:
             "pivot_types": sorted(kind.value for kind in self.pivot_types),
             "historical": self.historical,
             "identity_capable": self.identity_capable,
-            "ready": available and version_match and self.credential_configured,
+            # Compatibility field: READY means configured, not truth-proven.
+            "ready": configuration_ready,
+            "configuration_ready": configuration_ready,
+            "truth_state": "RUNTIME_CANARY_REQUIRED" if self.network_effect else "LOCAL_DETERMINISTIC",
         }
 
 
@@ -118,7 +122,7 @@ MAIGRET = SourceDescriptor(
     name="maigret.username",
     family="IDENTITY",
     package="maigret",
-    expected_version="0.6.4",
+    expected_version="0.6.5",
     supported_kinds=frozenset({IdentifierKind.USERNAME}),
     required_capability="osint.username.lookup",
     max_identifier_depth=2,
@@ -312,18 +316,26 @@ SOURCE_DESCRIPTORS = (
 def registry_health() -> dict[str, object]:
     sources = [descriptor.health() for descriptor in SOURCE_DESCRIPTORS]
     return {
-        "registry_version": "v3",
+        "registry_version": "v4",
+        "truth_engine": "SHERLOCK_TRUTH_ENGINE_V4",
         "source_count": len(sources),
         "sources": sources,
         "all_dependencies_available": all(bool(source["available"]) for source in sources),
         "all_versions_pinned": all(bool(source["version_match"]) for source in sources),
         "ready_sources": sum(1 for source in sources if bool(source["ready"])),
         "credential_gated_sources": sum(1 for source in sources if bool(source["requires_key"])),
+        "truth_contract": {
+            "completed_is_found": False,
+            "http_200_is_found": False,
+            "same_username_is_same_person": False,
+            "aggregator_duplicates_are_independent": False,
+            "runtime_canary_required_for_network_truth": True,
+        },
         "social_mesh": {
             "datasets": [
                 {
                     "name": "WhatsMyName",
-                    "commit": "e62338e4fc88536a330733d355a9d33a3a1697c6",
+                    "commit": "ea7dcef44ad5706650932347856855a21f6b99af",
                     "license": "CC BY-SA 4.0",
                     "mode": "RUNTIME_REFERENCE_NOT_VENDORED",
                 },
@@ -339,6 +351,8 @@ def registry_health() -> dict[str, object]:
                 "proxy_rotation": False,
                 "captcha_bypass": False,
                 "dataset_post_probes": "SKIPPED",
+                "waf_interstitials": "BLOCKED_NOT_FOUND",
+                "positive_canary": "REQUIRED_WHEN_REPRESENTABLE",
             },
         },
     }
