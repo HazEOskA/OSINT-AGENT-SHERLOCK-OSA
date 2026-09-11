@@ -7,8 +7,10 @@ from typing import Any, Iterable, Mapping, Sequence
 from urllib.parse import urlsplit
 
 from sherlock_osa.social_taxonomy import (
+    NSFW_BUCKETS,
     SOCIAL_CATEGORIES,
     categorise_accounts,
+    classify_sensitive_bucket,
     classify_service,
     normalise_service_name,
     signal_presence_status,
@@ -62,9 +64,12 @@ _STATUS_RANK = {
     "FOUND": 0,
     "OBSERVED": 1,
     "UNKNOWN": 2,
-    "RATE_LIMITED": 3,
-    "BLOCKED": 4,
-    "NOT_FOUND": 5,
+    "UNRELIABLE": 3,
+    "RATE_LIMITED": 4,
+    "BLOCKED": 5,
+    "TIMEOUT": 6,
+    "ERROR": 7,
+    "NOT_FOUND": 8,
 }
 
 
@@ -371,6 +376,7 @@ def _socialmesh_accounts(sensor_payloads: object) -> list[SocialAccount]:
                         service,
                         url=profile_url,
                         category_hint=item.get("category", ""),
+                        is_nsfw=bool(item.get("is_nsfw", item.get("isNSFW", False))),
                     ),
                     status="FOUND",
                     source="Sherlock Social Mesh",
@@ -525,6 +531,72 @@ def _dedupe_accounts(accounts: Iterable[SocialAccount]) -> list[SocialAccount]:
     )
 
 
+def _sensitive_intelligence(account_dicts: Sequence[Mapping[str, Any]]) -> dict[str, object]:
+    visible: list[dict[str, object]] = []
+    sections: dict[str, list[dict[str, object]]] = {bucket: [] for bucket in NSFW_BUCKETS}
+
+    for account in account_dicts:
+        if account.get("category") != "ADULT" or account.get("status") == "NOT_FOUND":
+            continue
+        item = dict(account)
+        bucket = classify_sensitive_bucket(
+            item.get("service", "unknown"),
+            url=item.get("profile_url", ""),
+            origin=item.get("origin", ""),
+        )
+        urls = [
+            url
+            for url in [item.get("profile_url"), *(item.get("evidence_urls") or [])]
+            if isinstance(url, str) and url.startswith(("http://", "https://"))
+        ]
+        status = str(item.get("status") or "OBSERVED")
+        item["sensitive_bucket"] = bucket
+        item["evidence_tier"] = (
+            "DIRECT_PUBLIC_SIGNAL"
+            if status == "FOUND" and bool(urls)
+            else "SOURCE_SIGNAL"
+            if status == "FOUND"
+            else "OBSERVED_ONLY"
+        )
+        item["media_autoload"] = False
+        visible.append(item)
+        sections[bucket].append(item)
+
+    status_counts = Counter(str(item.get("status") or "OBSERVED") for item in visible)
+    direct_public = sum(
+        1 for item in visible if item.get("evidence_tier") == "DIRECT_PUBLIC_SIGNAL"
+    )
+    found_total = int(status_counts.get("FOUND", 0))
+
+    return {
+        "version": "v1",
+        "default_collapsed": True,
+        "placement": "CASE_REPORT_BOTTOM",
+        "media_autoload": False,
+        "accounts": visible,
+        "sections": sections,
+        "summary": {
+            "signals_total": len(visible),
+            "found_total": found_total,
+            "direct_public_profiles": direct_public,
+            "observed_total": int(status_counts.get("OBSERVED", 0)),
+            "blocked_total": int(status_counts.get("BLOCKED", 0)),
+            "rate_limited_total": int(status_counts.get("RATE_LIMITED", 0)),
+            "unreliable_total": int(status_counts.get("UNRELIABLE", 0)),
+        },
+        "truth": {
+            "sensitive_category_is_not_identity_proof": True,
+            "same_username_is_not_same_person": True,
+            "found_requires_source_signal": True,
+            "direct_public_profile_requires_url": True,
+            "not_found_hidden_from_sensitive_ui": True,
+            "explicit_media_autoload": False,
+            "authenticated_sessions_used": False,
+            "captcha_bypass_used": False,
+        },
+    }
+
+
 def build_social_graph(
     *,
     emailosint: object = None,
@@ -544,6 +616,7 @@ def build_social_graph(
         for category, items in grouped.items()
     }
     status_counts = Counter(str(account.status) for account in accounts)
+    sensitive = _sensitive_intelligence(account_dicts)
 
     nodes: list[dict[str, object]] = [
         {"id": "target", "type": "TARGET", "label": "badany trop"}
@@ -595,11 +668,12 @@ def build_social_graph(
             )
 
     return {
-        "version": "v3.1",
+        "version": "v3.2",
         "accounts": account_dicts,
         "categories": grouped,
         "category_counts": category_counts,
         "status_counts": dict(sorted(status_counts.items())),
+        "sensitive_intelligence": sensitive,
         "summary": {
             "signals_total": len(accounts),
             "found_total": sum(1 for account in accounts if account.status == "FOUND"),
@@ -609,6 +683,7 @@ def build_social_graph(
             "messaging_found": category_counts.get("MESSAGING", 0),
             "developer_found": category_counts.get("DEVELOPER", 0),
             "music_found": category_counts.get("MUSIC", 0),
+            "adult_found": category_counts.get("ADULT", 0),
         },
         "graph": {
             "nodes": nodes,
@@ -622,5 +697,7 @@ def build_social_graph(
             "same_username_is_not_same_person": True,
             "direct_sources_merged": True,
             "raw_secret_values_exposed": False,
+            "sensitive_layer_default_collapsed": True,
+            "sensitive_media_autoload": False,
         },
     }
