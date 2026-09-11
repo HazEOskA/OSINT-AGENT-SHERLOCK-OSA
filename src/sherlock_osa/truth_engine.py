@@ -26,6 +26,7 @@ _POSITIVE_KEYS = (
     "present",
     "claimed",
     "taken",
+    "breached",
 )
 _NEGATIVE_KEYS = (
     "missing",
@@ -47,16 +48,14 @@ def presence_verdict(
     event_name: str = "",
     explicit_container: str = "",
 ) -> TruthVerdict:
-    """Classify source output without confusing transport success with truth.
-
-    A completed request is not a positive identity result. Explicit booleans win.
-    Positive result containers such as EmailOSINT ``linked_accounts`` are accepted as
-    provider assertions, while generic identifier payloads without a presence signal
-    remain OBSERVED.
-    """
+    """Classify source output without confusing transport success with truth."""
 
     if not isinstance(fields, Mapping):
         return TruthVerdict.OBSERVED
+
+    explicit = str(fields.get("truth_verdict", "")).strip().upper()
+    if explicit in TruthVerdict.__members__:
+        return TruthVerdict[explicit]
 
     positives: list[str] = []
     negatives: list[str] = []
@@ -96,9 +95,6 @@ def presence_verdict(
     if container in {"linked_accounts", "accounts_found", "confirmed_accounts"}:
         return TruthVerdict.FOUND
 
-    # EmailOSINT emits identifier_result only for provider module results. Treat a
-    # concrete profile URL as a positive provider assertion, but a bare username as
-    # an observation that still needs corroboration.
     if event_name.casefold() in {"identifier_result", "account_result", "profile_result"}:
         for key in ("profile_url", "url", "web_url", "html_url"):
             value = fields.get(key)
