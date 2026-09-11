@@ -190,6 +190,7 @@ def _looks_like_service_record(mapping: Mapping[str, Any], fallback_name: str = 
         "not_found",
         "unclaimed",
         "status",
+        "truth_verdict",
     }
     if presence_keys.intersection({str(key).casefold() for key in mapping}):
         return True
@@ -281,62 +282,46 @@ def _walk_service_records(
 
 
 def _emailosint_accounts(emailosint: object) -> list[SocialAccount]:
+    """Consume only normalized EmailOSINT identity signals.
+
+    Provider raw payload is preserved elsewhere for audit/debugging but is not walked
+    as account evidence. This prevents metadata, AI prose, breach URLs or generic
+    profile-like objects from silently becoming social-account claims.
+    """
+
     if not isinstance(emailosint, Mapping):
         return []
     accounts: list[SocialAccount] = []
 
     identity = emailosint.get("identity")
-    if isinstance(identity, Mapping):
-        signals = identity.get("signals")
-        if isinstance(signals, list):
-            for signal in signals:
-                if not isinstance(signal, Mapping):
-                    continue
-                fields = signal.get("fields")
-                payload = signal.get("provider_payload")
-                base = payload if isinstance(payload, Mapping) else fields if isinstance(fields, Mapping) else signal
-                source_name = _string(signal.get("source")) or "EmailOSINT"
-                if isinstance(base, Mapping):
-                    account = _account_from_mapping(
-                        base,
-                        fallback_service=source_name,
-                        source="EmailOSINT",
-                        origin="emailosint.identity.signals",
-                        confidence=0.96 if str(signal.get("status")) == "FOUND" else 0.72,
-                        forced_status=str(signal.get("status")) if signal.get("status") else None,
-                    )
-                    if account:
-                        accounts.append(account)
+    if not isinstance(identity, Mapping):
+        return accounts
+    signals = identity.get("signals")
+    if not isinstance(signals, list):
+        return accounts
 
-    provider = emailosint.get("provider")
-    if isinstance(provider, Mapping):
-        events = provider.get("events")
-        if isinstance(events, list):
-            for event in events[:1000]:
-                if not isinstance(event, Mapping):
-                    continue
-                event_name = _string(event.get("event"))
-                data = event.get("data")
-                fallback = event_name if classify_service(event_name) != "OTHER" else ""
-                accounts.extend(
-                    _walk_service_records(
-                        data,
-                        source="EmailOSINT",
-                        origin=f"emailosint.event.{event_name or 'message'}",
-                        fallback_service=fallback,
-                        confidence=0.9,
-                        limit=500,
-                    )
-                )
-        accounts.extend(
-            _walk_service_records(
-                provider.get("raw"),
-                source="EmailOSINT",
-                origin="emailosint.provider.raw",
-                confidence=0.82,
-                limit=700,
-            )
+    for signal in signals:
+        if not isinstance(signal, Mapping):
+            continue
+        status = str(signal.get("status", "OBSERVED")).upper()
+        if status not in _STATUS_RANK:
+            status = "UNKNOWN"
+        fields = signal.get("fields")
+        payload = signal.get("provider_payload")
+        base = payload if isinstance(payload, Mapping) else fields if isinstance(fields, Mapping) else signal
+        source_name = _string(signal.get("source")) or "EmailOSINT"
+        if not isinstance(base, Mapping):
+            continue
+        account = _account_from_mapping(
+            base,
+            fallback_service=source_name,
+            source="EmailOSINT",
+            origin="emailosint.identity.signals.v4",
+            confidence=0.96 if status == "FOUND" else 0.35 if status == "OBSERVED" else 0.1,
+            forced_status=status,
         )
+        if account:
+            accounts.append(account)
     return accounts
 
 
@@ -389,7 +374,7 @@ def _socialmesh_accounts(sensor_payloads: object) -> list[SocialAccount]:
                         if url.startswith(("http://", "https://"))
                     ),
                     fields=dict(item),
-                    origin="socialmesh.username",
+                    origin="socialmesh.username.truth-v4",
                 )
             )
     return accounts
@@ -410,11 +395,16 @@ def _direct_source_accounts(sensor_payloads: object) -> list[SocialAccount]:
         fields = record.get("fields")
         if not isinstance(fields, Mapping):
             continue
+        truth_verdict = _string(fields.get("truth_verdict")).upper()
+        if truth_verdict in {"UNRELIABLE", "ERROR", "BLOCKED", "RATE_LIMITED", "TIMEOUT"}:
+            continue
         confidence_raw = record.get("confidence", 0.72)
         confidence = float(confidence_raw) if isinstance(confidence_raw, (int, float)) else 0.72
         seed_username = _string(record.get("identifier_value")) if record.get("identifier_kind") == "USERNAME" else ""
 
         if source == "holehe.email":
+            if truth_verdict and truth_verdict != "FOUND":
+                continue
             registered = fields.get("registered")
             if isinstance(registered, list):
                 for item in registered[:256]:
@@ -423,8 +413,8 @@ def _direct_source_accounts(sensor_payloads: object) -> list[SocialAccount]:
                     account = _account_from_mapping(
                         item,
                         source="Holehe",
-                        origin="holehe.registered",
-                        confidence=max(0.75, confidence),
+                        origin="holehe.registered.truth-v4",
+                        confidence=confidence,
                         forced_status="FOUND",
                     )
                     if account:
@@ -432,6 +422,8 @@ def _direct_source_accounts(sensor_payloads: object) -> list[SocialAccount]:
             continue
 
         if source == "maigret.username":
+            if truth_verdict and truth_verdict != "FOUND":
+                continue
             profiles = fields.get("profiles")
             if isinstance(profiles, list):
                 for item in profiles[:256]:
@@ -441,8 +433,8 @@ def _direct_source_accounts(sensor_payloads: object) -> list[SocialAccount]:
                         item,
                         fallback_service=_string(item.get("site")),
                         source="Maigret",
-                        origin="maigret.profiles",
-                        confidence=max(0.7, confidence),
+                        origin="maigret.profiles.truth-v4",
+                        confidence=confidence,
                         forced_status="FOUND",
                         forced_username=seed_username,
                     )
@@ -476,7 +468,7 @@ def _direct_source_accounts(sensor_payloads: object) -> list[SocialAccount]:
                         _walk_service_records(
                             profile,
                             source="Gravatar",
-                            origin="gravatar.profile",
+                            origin="gravatar.profile.truth-v4",
                             fallback_service="Gravatar",
                             confidence=confidence,
                             limit=128,
@@ -569,7 +561,7 @@ def _sensitive_intelligence(account_dicts: Sequence[Mapping[str, Any]]) -> dict[
     found_total = int(status_counts.get("FOUND", 0))
 
     return {
-        "version": "v1",
+        "version": "v1-truth-v4",
         "default_collapsed": True,
         "placement": "CASE_REPORT_BOTTOM",
         "media_autoload": False,
@@ -587,7 +579,7 @@ def _sensitive_intelligence(account_dicts: Sequence[Mapping[str, Any]]) -> dict[
         "truth": {
             "sensitive_category_is_not_identity_proof": True,
             "same_username_is_not_same_person": True,
-            "found_requires_source_signal": True,
+            "found_requires_truth_verified_source_signal": True,
             "direct_public_profile_requires_url": True,
             "not_found_hidden_from_sensitive_ui": True,
             "explicit_media_autoload": False,
@@ -668,7 +660,8 @@ def build_social_graph(
             )
 
     return {
-        "version": "v3.2",
+        "version": "v4",
+        "truth_engine": "SHERLOCK_TRUTH_ENGINE_V4",
         "accounts": account_dicts,
         "categories": grouped,
         "category_counts": category_counts,
@@ -692,7 +685,8 @@ def build_social_graph(
             "edge_count": len(edges),
         },
         "truth": {
-            "found_requires_source_signal": True,
+            "found_requires_truth_verified_source_signal": True,
+            "raw_provider_payload_is_account_evidence": False,
             "category_is_classification_not_identity_proof": True,
             "same_username_is_not_same_person": True,
             "direct_sources_merged": True,
