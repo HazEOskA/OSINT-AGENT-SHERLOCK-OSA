@@ -149,7 +149,7 @@ class DatasetProbeTests(unittest.TestCase):
 
 
 class SocialGraphCatchAllTests(unittest.TestCase):
-    def test_unknown_emailosint_event_names_still_surface_google_and_dating(self) -> None:
+    def test_unknown_raw_emailosint_event_names_do_not_create_account_claims(self) -> None:
         emailosint = {
             "identity": {"signals": []},
             "provider": {
@@ -188,13 +188,53 @@ class SocialGraphCatchAllTests(unittest.TestCase):
             },
         }
         graph = build_social_graph(emailosint=emailosint, sensor_payloads={})
+        self.assertEqual(graph["summary"]["google_found"], 0)
+        self.assertEqual(graph["summary"]["dating_found"], 0)
+        self.assertEqual(graph["summary"]["social_found"], 0)
+        self.assertEqual(graph["accounts"], [])
+        self.assertFalse(graph["truth"]["raw_provider_payload_is_account_evidence"])
+
+    def test_normalized_emailosint_signals_surface_google_and_dating(self) -> None:
+        emailosint = {
+            "identity": {
+                "signals": [
+                    {
+                        "source": "Google Account",
+                        "status": "FOUND",
+                        "fields": {
+                            "service": "Google Account",
+                            "found": True,
+                            "username": "osa",
+                            "profile_url": "https://profiles.google.com/osa",
+                        },
+                    },
+                    {
+                        "source": "Tinder",
+                        "status": "FOUND",
+                        "fields": {
+                            "platform": "Tinder",
+                            "registered": True,
+                            "username": "osa",
+                            "profile_url": "https://example.test/tinder/osa",
+                        },
+                    },
+                    {
+                        "source": "Instagram",
+                        "status": "FOUND",
+                        "fields": {
+                            "service": "Instagram",
+                            "exists": True,
+                            "username": "osa",
+                            "profile_url": "https://instagram.com/osa",
+                        },
+                    },
+                ]
+            }
+        }
+        graph = build_social_graph(emailosint=emailosint, sensor_payloads={})
         self.assertGreaterEqual(graph["summary"]["google_found"], 1)
         self.assertGreaterEqual(graph["summary"]["dating_found"], 1)
         self.assertGreaterEqual(graph["summary"]["social_found"], 1)
-        services = {item["service"] for item in graph["accounts"] if item["status"] == "FOUND"}
-        self.assertIn("Google Account", services)
-        self.assertIn("Tinder", services)
-        self.assertIn("Instagram", services)
 
     def test_socialmesh_batch_is_merged_into_same_graph(self) -> None:
         graph = build_social_graph(
