@@ -1,7 +1,6 @@
 "use strict";
 
 const $ = (selector) => document.querySelector(selector);
-const OPERATOR_KEY_STORAGE = "sherlock_api_key";
 const MAX_FEED_ROWS = 220;
 
 function toast(message, error = false) {
@@ -14,41 +13,9 @@ function toast(message, error = false) {
   }, 5000);
 }
 
-function operatorToken() {
-  const input = $("#api-key");
-  return (input && input.value.trim()) ||
-    localStorage.getItem(OPERATOR_KEY_STORAGE) ||
-    "";
-}
-
-function setOperatorAuthState(authorized) {
-  const settings = $("#operator-settings");
-  const summary = settings && settings.querySelector("summary");
-  const input = $("#api-key");
-  const label = settings && settings.querySelector('label[for="api-key"]');
-
-  if (!settings || !summary || !input || !label) return;
-
-  summary.textContent = authorized ? "OPERATOR AUTH ✓" : "Ustawienia operatora";
-  input.hidden = authorized;
-  label.hidden = authorized;
-  if (authorized) settings.open = false;
-}
-
-function rememberOperatorToken(token) {
-  const value = String(token || "").trim();
-  if (!value) return;
-  localStorage.setItem(OPERATOR_KEY_STORAGE, value);
-  const input = $("#api-key");
-  if (input) input.value = value;
-  setOperatorAuthState(true);
-}
-
 async function requestJson(path, options = {}) {
-  const token = operatorToken();
   const headers = { Accept: "application/json", ...(options.headers || {}) };
   if (options.body) headers["Content-Type"] = "application/json";
-  if (token) headers.Authorization = "Bearer " + token;
 
   const response = await fetch(path, { ...options, headers });
   const body = await response.json().catch(() => ({
@@ -93,12 +60,10 @@ function parseSseFrame(frame) {
 }
 
 async function requestSse(path, payload, onEvent) {
-  const token = operatorToken();
   const headers = {
     Accept: "text/event-stream",
     "Content-Type": "application/json",
   };
-  if (token) headers.Authorization = "Bearer " + token;
 
   const response = await fetch(path, {
     method: "POST",
@@ -881,16 +846,6 @@ async function runSearch(event) {
   event.preventDefault();
 
   const form = event.currentTarget;
-  const token = operatorToken();
-  if (!token) {
-    $("#operator-settings").open = true;
-    toast(
-      "Wpisz Sherlock API key. Po pierwszym udanym wyszukiwaniu zostanie zapamiętany.",
-      true
-    );
-    return;
-  }
-
   const button = $("#search-submit");
   const note = $("#search-note");
   const liveBox = $("#live-box");
@@ -918,18 +873,11 @@ async function runSearch(event) {
       appendLiveEvent
     );
 
-    rememberOperatorToken(token);
     renderResult(result);
     note.textContent =
       "Gotowe. Wynik rozdziela fakty, powiązania i hipotezy; dostępne dowody są klikalne.";
     toast("Sherlock MAX zakończył śledztwo.");
   } catch (error) {
-    if (error.status === 401) {
-      localStorage.removeItem(OPERATOR_KEY_STORAGE);
-      setOperatorAuthState(false);
-      $("#operator-settings").open = true;
-    }
-
     $("#live-status").textContent = "BŁĄD";
     toast((error.code || "ERROR") + ": " + error.message, true);
     note.textContent = error.message;
@@ -951,14 +899,6 @@ async function bootstrap() {
     $("#live-feed").replaceChildren();
   });
   syncModeChip();
-
-  const saved = localStorage.getItem(OPERATOR_KEY_STORAGE);
-  if (saved) {
-    $("#api-key").value = saved;
-    setOperatorAuthState(true);
-  } else {
-    setOperatorAuthState(false);
-  }
 
   try {
     const health = await requestJson("/api/v1/health", {});
