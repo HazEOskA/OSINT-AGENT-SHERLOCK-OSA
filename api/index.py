@@ -12,19 +12,19 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from sherlock_osa.api import handler_factory  # noqa: E402
-from sherlock_osa.demo import PublicDemoService  # noqa: E402
+from sherlock_osa.emailosint import DEFAULT_EMAILOSINT_ENDPOINT  # noqa: E402
+from sherlock_osa.vercel_search import VercelSearchService  # noqa: E402
 
 
-# Vercel runs the public/privacy UI on PublicDemoService. Attach the real
-# EmailOSINT provider settings here so the primary lookup route does not fall
-# back to the old www hostname (which redirects POST and can become GET/405).
-_service = PublicDemoService()
+# Vercel exposes passive Sherlock Full Search without wiring the private
+# mission/control-plane runtime.
+_service = VercelSearchService()
 _base = _service.settings
 _service.settings = SimpleNamespace(
     max_body_bytes=_base.max_body_bytes,
     emailosint_endpoint=os.getenv(
         "EMAILOSINT_ENDPOINT",
-        "https://emailosint.org/v1/lookup/email",
+        DEFAULT_EMAILOSINT_ENDPOINT,
     ).strip().rstrip("/"),
     emailosint_api_key=os.getenv("EMAILOSINT_API_KEY", "").strip(),
     emailosint_auth_header=os.getenv("EMAILOSINT_AUTH_HEADER", "Authorization").strip(),
