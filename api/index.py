@@ -21,7 +21,6 @@ from sherlock_osa.demo import PublicDemoService  # noqa: E402
 _service = PublicDemoService()
 _base = _service.settings
 _service.settings = SimpleNamespace(
-    api_key=_base.api_key,
     max_body_bytes=_base.max_body_bytes,
     emailosint_endpoint=os.getenv(
         "EMAILOSINT_ENDPOINT",
