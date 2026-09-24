@@ -87,6 +87,7 @@ class VercelSearchService(PublicDemoService):
                 "default_mode": "MAX",
                 "modes": ["QUICK", "DEEP", "MAX"],
                 "truth_engine": "V4",
+                "full_search_attached": True,
             },
             "truth": {
                 "live_engine_called": False,
