@@ -458,7 +458,7 @@ class ResearchMissionService(MissionService):
                 "engine": "SHERLOCK_TRUTH_ENGINE_V4",
                 "mode": "BOUNDED_PASSIVE",
                 "search_mode": mode.name,
-                "operator_auth_required": True,
+                "operator_auth_required": False,
                 "fabricated_results": False,
                 "completed_is_found": False,
                 "http_200_is_found": False,
