@@ -726,6 +726,7 @@ def run_username_probe(
                             reliability=0.0,
                             reason=f"WORKER:{type(exc).__name__}",
                             dataset_commit=definition.dataset_commit,
+                            is_nsfw=definition.is_nsfw,
                             attribution=definition.attribution,
                         )
                     )
