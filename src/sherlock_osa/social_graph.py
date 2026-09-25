@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Sequence
 from urllib.parse import urlsplit
 
+from sherlock_osa.source_policy import is_blocked_public_source
 from sherlock_osa.social_taxonomy import (
     NSFW_BUCKETS,
     SOCIAL_CATEGORIES,
@@ -212,6 +213,8 @@ def _account_from_mapping(
     if not service:
         return None
     profile_url = _profile_url(mapping)
+    if is_blocked_public_source(name=service, url=profile_url):
+        return None
     category = classify_service(
         service,
         url=profile_url,
