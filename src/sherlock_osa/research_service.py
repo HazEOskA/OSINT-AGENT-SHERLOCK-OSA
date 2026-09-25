@@ -472,7 +472,7 @@ class ResearchMissionService(MissionService):
                 ),
                 "phone_metadata_source": "LIBPHONENUMBER_OFFLINE",
                 "social_mesh": "RUNTIME_PINNED_WMN_PLUS_SHERLOCK_WITH_CANARY",
-                "social_graph_direct_sources": ["HOLEHE", "MAIGRET", "GITHUB", "GITLAB", "GRAVATAR"],
+                "social_graph_direct_sources": ["HOLEHE", "MAIGRET", "GITHUB", "GITLAB", "GRAVATAR", "PROFILE_PUBLIC"],
                 "social_probe_post_requests": False,
                 "social_probe_authenticated_sessions": False,
                 "social_probe_proxy_rotation": False,
@@ -490,6 +490,7 @@ class ResearchMissionService(MissionService):
                     "google_found": social_graph["summary"]["google_found"],
                     "social_found": social_graph["summary"]["social_found"],
                     "dating_found": social_graph["summary"]["dating_found"],
+                    "adult_found": social_graph["summary"]["adult_found"],
                 },
             )
             event_sink(

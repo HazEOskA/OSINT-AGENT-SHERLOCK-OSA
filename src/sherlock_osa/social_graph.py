@@ -476,6 +476,26 @@ def _direct_source_accounts(sensor_payloads: object) -> list[SocialAccount]:
                     )
             continue
 
+        if source == "profile.public":
+            if fields.get("found") is not True:
+                continue
+            profile = fields.get("profile")
+            if not isinstance(profile, Mapping):
+                continue
+            service = _string(profile.get("service")) or "Public profile"
+            account = _account_from_mapping(
+                profile,
+                fallback_service=service,
+                source="Profile Enrichment",
+                origin="profile.public.truth-v4",
+                confidence=confidence,
+                forced_status="FOUND",
+                forced_username=_string(profile.get("candidate_username")),
+            )
+            if account:
+                accounts.append(account)
+            continue
+
     return accounts
 
 
