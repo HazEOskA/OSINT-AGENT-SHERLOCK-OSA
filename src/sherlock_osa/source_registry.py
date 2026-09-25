@@ -149,6 +149,21 @@ SOCIAL_MESH_USERNAME = SourceDescriptor(
     identity_capable=True,
 )
 
+PROFILE_PUBLIC = SourceDescriptor(
+    name="profile.public",
+    family="PROFILE",
+    supported_kinds=frozenset({IdentifierKind.URL}),
+    required_capability="osint.url.trace",
+    max_identifier_depth=3,
+    priority=16,
+    cost=SourceCost.LOW,
+    trust_class=SourceTrust.DIRECT,
+    rate_limit="SITE_DEFINED",
+    timeout_seconds=15.0,
+    pivot_types=frozenset({IdentifierKind.URL, IdentifierKind.EMAIL, IdentifierKind.USERNAME}),
+    identity_capable=True,
+)
+
 GRAVATAR_EMAIL = SourceDescriptor(
     name="gravatar.email",
     family="IDENTITY",
@@ -304,6 +319,7 @@ SOURCE_DESCRIPTORS = (
     RDAP_DOMAIN,
     CRTSH_DOMAIN,
     SOCIAL_MESH_USERNAME,
+    PROFILE_PUBLIC,
     HOLEHE,
     MAIGRET,
     WAYBACK_URL,
