@@ -63,7 +63,8 @@ def build_human_report(
         f"Sprawdziłem {summary.sources_checked} przebiegów źródłowych i wykonałem "
         f"{summary.module_invocations} zapytań.",
         f"Po odrzuceniu wyników negatywnych, niejednoznacznych i niewiarygodnych zostało "
-        f"{summary.findings} ustaleń, w tym {summary.confirmed_findings} potwierdzonych.",
+        f"{len(primary_findings)} głównych ustaleń, w tym "
+        f"{sum(1 for finding in primary_findings if finding.status.value == 'CONFIRMED')} potwierdzonych.",
         f"Dostępnych jest {hard_links} klikalnych linków do dowodów.",
         "Truth Engine V4 nie traktuje HTTP 200 ani samego zakończenia źródła jako dowodu istnienia konta.",
     ]
