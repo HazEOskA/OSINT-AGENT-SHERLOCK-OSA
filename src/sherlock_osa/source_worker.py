@@ -15,6 +15,7 @@ from typing import Any, Mapping
 from urllib.parse import urlsplit
 
 from sherlock_osa.source_pack import WORKER_PROTOCOL
+from sherlock_osa.source_policy import is_blocked_public_source
 
 
 USERNAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
@@ -401,6 +402,8 @@ async def _maigret_lookup(username: str, timeout_seconds: float) -> dict[str, ob
             continue
         url = result.get("url_user")
         url_text = str(url) if isinstance(url, str) else ""
+        if is_blocked_public_source(name=site_name, url=url_text):
+            continue
         ids_data = result.get("ids_data")
         record = {
             "site": str(site_name)[:120],
