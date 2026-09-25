@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
+from pathlib import Path
 from typing import Mapping
 
 from sherlock_osa.research import (
@@ -74,6 +76,11 @@ class IsolatedSourceModule(ResearchModule):
                 remaining - 0.5,
             ),
         )
+        worker_env = os.environ.copy()
+        src_root = str(Path(__file__).resolve().parents[1])
+        worker_env["PYTHONPATH"] = os.pathsep.join(
+            value for value in (src_root, worker_env.get("PYTHONPATH", "")) if value
+        )
         process = await asyncio.create_subprocess_exec(
             sys.executable,
             "-m",
@@ -82,6 +89,7 @@ class IsolatedSourceModule(ResearchModule):
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            env=worker_env,
         )
         request = json.dumps(
             {
