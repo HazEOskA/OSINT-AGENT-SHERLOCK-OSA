@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
@@ -14,6 +15,7 @@ from sherlock_osa.service import MissionService
 
 MISSION_PATH = re.compile(r"^/api/v1/missions/([0-9a-f-]{36})$")
 REPLAY_PATH = re.compile(r"^/api/v1/missions/([0-9a-f-]{36})/replay$")
+LOGGER = logging.getLogger("sherlock_osa.api")
 ASSETS = {
     "/": ("index.html", "text/html; charset=utf-8"),
     "/assets/styles.css": ("styles.css", "text/css; charset=utf-8"),
@@ -197,6 +199,7 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
                 except SherlockError as exc:
                     self._sse("error", exc.as_dict())
                 except Exception:
+                    LOGGER.exception("Full Search stream failed")
                     self._sse(
                         "error",
                         {
@@ -251,6 +254,11 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
                 self._start_sse()
                 try:
                     summary = research(body, event_sink=self._sse)
+                    research_result = summary.get("research") if isinstance(summary, dict) else None
+                    if isinstance(research_result, dict):
+                        self._sse("research_result", research_result)
+                        if "query" in research_result and "detective" in research_result:
+                            self._sse("case_result", research_result)
                     self._sse(
                         "session_summary",
                         {
@@ -262,9 +270,10 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
                 except SherlockError as exc:
                     self._sse("error", exc.as_dict())
                 except Exception:
+                    LOGGER.exception("Full Research stream failed")
                     self._sse(
                         "error",
-                        {"error": {"code": "INTERNAL_ERROR", "message": "Błąd wewnętrzny."}},
+                        {"error": {"code": "INTERNAL_ERROR", "message": "Błąd wewnętrzny Full Research."}},
                     )
                 finally:
                     self.close_connection = True

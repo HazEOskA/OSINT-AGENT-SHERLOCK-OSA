@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from sherlock_osa import ENGINE_PIN, __version__
+from sherlock_osa.contracts import require_mapping
 from sherlock_osa.demo import PublicDemoService
 from sherlock_osa.investigation import InvestigationMode
 from sherlock_osa.phone_metadata import PhoneMetadataModule
@@ -48,6 +49,43 @@ class VercelSearchService(PublicDemoService):
     ) -> dict[str, object]:
         return ResearchMissionService.full_search(self, raw, event_sink=event_sink)
 
+    def research(
+        self,
+        raw: object,
+        *,
+        event_sink: EventSink | None = None,
+    ) -> dict[str, object]:
+        data = require_mapping(raw, field_name="research")
+        if "query" not in data:
+            from sherlock_osa.errors import SherlockError
+
+            raise SherlockError(
+                "PUBLIC_RESEARCH_QUERY_REQUIRED",
+                "Publiczny Full Research wymaga pola query; mission-based research należy do prywatnego control-plane.",
+                status=422,
+            )
+        search_payload = {
+            "query": data.get("query"),
+            "kind": data.get("kind", "AUTO"),
+            "mode": data.get("mode", "MAX"),
+        }
+        result = self.full_search(search_payload, event_sink=event_sink)
+        return {
+            "mission_id": None,
+            "research": result,
+            "purge": {
+                "requested": False,
+                "performed": False,
+                "scope": "PUBLIC_STATELESS_REQUEST",
+            },
+            "sources": self.research_sources(),
+            "truth": {
+                "public_query_research": True,
+                "mission_control_plane_exposed": False,
+                "persistence": "PER_REQUEST",
+            },
+        }
+
     def health(self, *, probe_engine: bool = False) -> dict[str, object]:
         research = self.research_sources()
         full_pack = bool(research["all_dependencies_available"]) and bool(
@@ -88,6 +126,7 @@ class VercelSearchService(PublicDemoService):
                 "modes": ["QUICK", "DEEP", "MAX"],
                 "truth_engine": "V4",
                 "full_search_attached": True,
+                "full_research_attached": True,
             },
             "truth": {
                 "live_engine_called": False,

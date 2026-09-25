@@ -4,6 +4,7 @@ from dataclasses import replace
 
 from sherlock_osa import site_probe
 from sherlock_osa.site_probe import ProbeBatch, ProbeResult, ProbeVerdict, SiteDefinition
+from sherlock_osa.source_policy import is_blocked_public_source
 from sherlock_osa.truth_engine import canary_username, detect_interstitial
 
 
@@ -49,7 +50,14 @@ def load_guarded_definitions(
         site_probe.WMN_COMMIT = previous_commit
         site_probe.WMN_DATA_URL = previous_url
 
-    sanitized = [_sanitize_definition(definition) for definition in definitions]
+    sanitized = [
+        _sanitize_definition(definition)
+        for definition in definitions
+        if not is_blocked_public_source(
+            name=definition.name,
+            url=definition.url_pretty or definition.url_check,
+        )
+    ]
     return sanitized, datasets
 
 
