@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
+from pathlib import Path
 from typing import Mapping
 
 from sherlock_osa.research import (
@@ -53,6 +55,11 @@ class SocialMeshUsernameModule:
             raise TimeoutError("research deadline reached")
         timeout = max(5.0, min(55.0, remaining - 1.0))
 
+        worker_env = os.environ.copy()
+        src_root = str(Path(__file__).resolve().parents[1])
+        worker_env["PYTHONPATH"] = os.pathsep.join(
+            value for value in (src_root, worker_env.get("PYTHONPATH", "")) if value
+        )
         process = await asyncio.create_subprocess_exec(
             sys.executable,
             "-m",
@@ -60,6 +67,7 @@ class SocialMeshUsernameModule:
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            env=worker_env,
         )
         request = json.dumps(
             {
