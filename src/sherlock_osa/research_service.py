@@ -450,7 +450,7 @@ class ResearchMissionService(MissionService):
             "truth": {
                 "mode": "BOUNDED_PASSIVE",
                 "search_mode": mode.name,
-                "operator_auth_required": True,
+                "operator_auth_required": False,
                 "fabricated_results": False,
                 "phone_backing": bool(phone_results) or bool(hibp.get("ready")),
                 "phone_exposure_source": (
