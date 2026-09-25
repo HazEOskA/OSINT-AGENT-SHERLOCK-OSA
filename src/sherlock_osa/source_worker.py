@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import ipaddress
 import json
 import logging
 import os
 import re
+import socket
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from html.parser import HTMLParser
 from importlib.resources import files
 from typing import Any, Mapping
 from urllib.parse import urlsplit
@@ -70,6 +73,374 @@ def _valid_url(value: str) -> str | None:
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         return None
     return candidate
+
+
+def _assert_public_profile_url(value: str) -> str:
+    candidate = _valid_url(value)
+    if candidate is None:
+        raise ValueError("profile enrichment requires valid URL")
+
+    parsed = urlsplit(candidate)
+    if parsed.username or parsed.password:
+        raise ValueError("profile URL credentials are not allowed")
+
+    host = (parsed.hostname or "").rstrip(".").casefold()
+    if not host or host == "localhost" or host.endswith(".localhost") or host.endswith(".local"):
+        raise ValueError("profile URL host is not public")
+
+    try:
+        literal = ipaddress.ip_address(host)
+    except ValueError:
+        literal = None
+    if literal is not None:
+        if not literal.is_global:
+            raise ValueError("profile URL IP is not public")
+        return candidate
+
+    try:
+        addresses = {
+            item[4][0].split("%", 1)[0]
+            for item in socket.getaddrinfo(
+                host,
+                parsed.port or (443 if parsed.scheme == "https" else 80),
+                type=socket.SOCK_STREAM,
+            )
+        }
+    except OSError as exc:
+        raise RuntimeError(f"profile host resolution failed: {exc}") from exc
+
+    if not addresses:
+        raise RuntimeError("profile host did not resolve")
+    for address in addresses:
+        try:
+            resolved = ipaddress.ip_address(address)
+        except ValueError as exc:
+            raise RuntimeError("profile host resolved to invalid address") from exc
+        if not resolved.is_global:
+            raise ValueError("profile URL resolves to a non-public address")
+    return candidate
+
+
+class _PublicProfileRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        safe_url = _assert_public_profile_url(urllib.parse.urljoin(req.full_url, newurl))
+        return super().redirect_request(req, fp, code, msg, headers, safe_url)
+
+
+class _ProfileMetadataParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.title_parts: list[str] = []
+        self.meta: dict[str, str] = {}
+        self.rel_me: list[str] = []
+        self.mailto: list[str] = []
+        self.canonical: str = ""
+        self.jsonld_chunks: list[str] = []
+        self._in_title = False
+        self._in_jsonld = False
+
+    def handle_starttag(self, tag: str, attrs) -> None:
+        data = {str(key).casefold(): str(value) for key, value in attrs if value is not None}
+        tag = tag.casefold()
+        if tag == "title":
+            self._in_title = True
+            return
+        if tag == "meta":
+            key = (
+                data.get("property")
+                or data.get("name")
+                or data.get("itemprop")
+                or ""
+            ).strip().casefold()
+            content = data.get("content", "").strip()
+            if key and content and key not in self.meta:
+                self.meta[key] = content[:2000]
+            return
+        if tag == "link":
+            href = data.get("href", "").strip()
+            rel = {part.casefold() for part in data.get("rel", "").split()}
+            if "canonical" in rel and href:
+                self.canonical = href[:2048]
+            if "me" in rel and href:
+                self.rel_me.append(href[:2048])
+            return
+        if tag == "a":
+            href = data.get("href", "").strip()
+            rel = {part.casefold() for part in data.get("rel", "").split()}
+            if "me" in rel and href:
+                self.rel_me.append(href[:2048])
+            if href.casefold().startswith("mailto:"):
+                self.mailto.append(href[7:].split("?", 1)[0][:320])
+            return
+        if tag == "script" and data.get("type", "").casefold() == "application/ld+json":
+            self._in_jsonld = True
+
+    def handle_endtag(self, tag: str) -> None:
+        tag = tag.casefold()
+        if tag == "title":
+            self._in_title = False
+        elif tag == "script":
+            self._in_jsonld = False
+
+    def handle_data(self, data: str) -> None:
+        if self._in_title and len("".join(self.title_parts)) < 2000:
+            self.title_parts.append(data)
+        if self._in_jsonld and sum(len(item) for item in self.jsonld_chunks) < 64_000:
+            self.jsonld_chunks.append(data)
+
+
+def _profile_jsonld_signals(raw_chunks: list[str]) -> dict[str, object]:
+    if not raw_chunks:
+        return {}
+    raw = "".join(raw_chunks).strip()
+    if not raw:
+        return {}
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+
+    names: list[str] = []
+    usernames: list[str] = []
+    emails: list[str] = []
+    urls: list[str] = []
+    descriptions: list[str] = []
+
+    def collect(node: object, depth: int = 0) -> None:
+        if depth > 5:
+            return
+        if isinstance(node, Mapping):
+            raw_type = node.get("@type")
+            types = (
+                {str(item).casefold() for item in raw_type}
+                if isinstance(raw_type, list)
+                else {str(raw_type).casefold()}
+            )
+            identity_like = bool(types & {"person", "profilepage"})
+            if identity_like:
+                for key, target in (
+                    ("name", names),
+                    ("alternateName", usernames),
+                    ("email", emails),
+                    ("description", descriptions),
+                ):
+                    value = node.get(key)
+                    if isinstance(value, str) and value.strip():
+                        target.append(value.strip())
+                for key in ("url", "sameAs"):
+                    value = node.get(key)
+                    if isinstance(value, str) and value.strip():
+                        urls.append(value.strip())
+                    elif isinstance(value, list):
+                        urls.extend(
+                            item.strip()
+                            for item in value
+                            if isinstance(item, str) and item.strip()
+                        )
+            for child in list(node.values())[:96]:
+                if isinstance(child, (Mapping, list, tuple)):
+                    collect(child, depth + 1)
+        elif isinstance(node, (list, tuple)):
+            for child in list(node)[:96]:
+                collect(child, depth + 1)
+
+    collect(payload)
+    return {
+        "names": names[:8],
+        "usernames": usernames[:8],
+        "emails": emails[:8],
+        "urls": urls[:24],
+        "descriptions": descriptions[:8],
+    }
+
+
+def _profile_public_lookup(url: str, timeout_seconds: float) -> dict[str, object]:
+    target = _assert_public_profile_url(url)
+    opener = urllib.request.build_opener(_PublicProfileRedirectHandler())
+    request = urllib.request.Request(
+        target,
+        method="GET",
+        headers={
+            **_request_headers(),
+            "Accept": "text/html,application/xhtml+xml;q=0.9",
+        },
+    )
+    try:
+        with opener.open(request, timeout=max(1.0, min(timeout_seconds, 15.0))) as response:
+            status = int(getattr(response, "status", 200))
+            final_url = _assert_public_profile_url(str(response.geturl()))
+            content_type = response.headers.get("Content-Type", "")
+            raw = response.read(1_000_001)
+    except urllib.error.HTTPError as exc:
+        if exc.code in {404, 410}:
+            return {
+                "protocol": WORKER_PROTOCOL,
+                "ok": True,
+                "fields": {
+                    "provider": "profile-public",
+                    "found": False,
+                    "truth_verdict": "NOT_FOUND",
+                    "profile_url": target,
+                },
+                "pivots": [],
+                "source_urls": [target],
+                "confidence": 0.15,
+            }
+        exc.read(2048)
+        raise RuntimeError(f"profile source HTTP {exc.code}") from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise RuntimeError(f"profile source unavailable: {exc}") from exc
+
+    if status != 200:
+        raise RuntimeError(f"profile source HTTP {status}")
+    if len(raw) > 1_000_000:
+        raise RuntimeError("profile page too large")
+    if "html" not in content_type.casefold():
+        return {
+            "protocol": WORKER_PROTOCOL,
+            "ok": True,
+            "fields": {
+                "provider": "profile-public",
+                "found": False,
+                "truth_verdict": "UNKNOWN",
+                "profile_url": final_url,
+                "reason": "NON_HTML_PROFILE",
+            },
+            "pivots": [],
+            "source_urls": [final_url],
+            "confidence": 0.1,
+        }
+
+    parser = _ProfileMetadataParser()
+    parser.feed(raw.decode("utf-8", errors="replace"))
+    jsonld = _profile_jsonld_signals(parser.jsonld_chunks)
+    parsed = urlsplit(final_url)
+    host = (parsed.hostname or "").casefold()
+    path_parts = [urllib.parse.unquote(part) for part in parsed.path.split("/") if part]
+    inferred_username = path_parts[-1] if path_parts and USERNAME_RE.fullmatch(path_parts[-1]) else ""
+
+    explicit_usernames = [
+        value
+        for key in ("profile:username", "twitter:creator")
+        for value in [parser.meta.get(key, "").lstrip("@").strip()]
+        if value and USERNAME_RE.fullmatch(value)
+    ]
+    explicit_usernames.extend(
+        value
+        for value in jsonld.get("usernames", [])
+        if isinstance(value, str) and USERNAME_RE.fullmatch(value)
+    )
+    candidate_username = (explicit_usernames or ([inferred_username] if inferred_username else []))
+    candidate_username_value = candidate_username[0] if candidate_username else ""
+
+    display_name = next(
+        (
+            value.strip()
+            for value in (
+                *(jsonld.get("names", []) if isinstance(jsonld.get("names"), list) else []),
+                parser.meta.get("og:title", ""),
+                parser.meta.get("twitter:title", ""),
+                parser.meta.get("author", ""),
+                "".join(parser.title_parts),
+            )
+            if isinstance(value, str) and value.strip()
+        ),
+        "",
+    )[:300]
+    bio = next(
+        (
+            value.strip()
+            for value in (
+                *(jsonld.get("descriptions", []) if isinstance(jsonld.get("descriptions"), list) else []),
+                parser.meta.get("og:description", ""),
+                parser.meta.get("description", ""),
+            )
+            if isinstance(value, str) and value.strip()
+        ),
+        "",
+    )[:1000]
+
+    emails: list[str] = []
+    for value in [
+        *parser.mailto,
+        *(jsonld.get("emails", []) if isinstance(jsonld.get("emails"), list) else []),
+    ]:
+        if not isinstance(value, str):
+            continue
+        email = value.removeprefix("mailto:").strip().casefold()
+        if EMAIL_RE.fullmatch(email) and email not in emails:
+            emails.append(email)
+
+    external_urls: list[str] = []
+    raw_links = [
+        *parser.rel_me,
+        *(jsonld.get("urls", []) if isinstance(jsonld.get("urls"), list) else []),
+    ]
+    if parser.canonical:
+        raw_links.append(parser.canonical)
+    for value in raw_links:
+        if not isinstance(value, str):
+            continue
+        absolute = urllib.parse.urljoin(final_url, value.strip())
+        valid = _valid_url(absolute)
+        if not valid:
+            continue
+        linked_host = (urlsplit(valid).hostname or "").casefold()
+        if valid == final_url or linked_host == host:
+            continue
+        if valid not in external_urls:
+            external_urls.append(valid)
+        if len(external_urls) >= 16:
+            break
+
+    explicit_profile_signal = bool(
+        explicit_usernames
+        or emails
+        or external_urls
+        or jsonld.get("names")
+        or parser.meta.get("profile:first_name")
+        or parser.meta.get("profile:last_name")
+        or parser.meta.get("author")
+    )
+    contextual_profile_signal = bool(candidate_username_value and (display_name or bio))
+    found = explicit_profile_signal or contextual_profile_signal
+
+    pivots: list[dict[str, str]] = []
+    if candidate_username_value:
+        pivots.append({"kind": "USERNAME", "value": candidate_username_value})
+    pivots.extend({"kind": "EMAIL", "value": email} for email in emails[:4])
+    pivots.extend({"kind": "URL", "value": link} for link in external_urls[:12])
+
+    profile = {
+        "service": host[:253],
+        "profile_url": final_url,
+        "candidate_username": candidate_username_value,
+        "display_name": display_name,
+        "bio": bio,
+        "public_email": emails[0] if emails else "",
+        "links": external_urls,
+        "metadata_only": True,
+        "authenticated_session": False,
+    }
+    return {
+        "protocol": WORKER_PROTOCOL,
+        "ok": True,
+        "fields": {
+            "provider": "profile-public",
+            "found": found,
+            "truth_verdict": "FOUND" if found else "UNKNOWN",
+            "profile": profile,
+            "signal_count": int(bool(candidate_username_value))
+            + int(bool(display_name))
+            + int(bool(bio))
+            + len(emails)
+            + len(external_urls),
+            "http_200_is_positive": False,
+        },
+        "pivots": pivots[:16] if found else [],
+        "source_urls": [final_url],
+        "confidence": 0.86 if found and explicit_profile_signal else 0.72 if found else 0.15,
+    }
 
 
 def _valid_phone(value: str) -> str | None:
@@ -1047,6 +1418,10 @@ def main() -> int:
             if kind != "USERNAME":
                 raise ValueError("maigret requires USERNAME")
             payload = asyncio.run(_maigret_lookup(value, timeout))
+        elif source == "profile.public":
+            if kind != "URL":
+                raise ValueError("profile enrichment requires URL")
+            payload = _profile_public_lookup(value, timeout)
         elif source == "gravatar.email":
             if kind != "EMAIL":
                 raise ValueError("gravatar requires EMAIL")
