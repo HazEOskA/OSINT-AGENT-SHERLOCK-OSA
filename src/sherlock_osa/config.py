@@ -77,7 +77,6 @@ def _header_name(name: str, default: str) -> str:
 
 @dataclass(frozen=True, slots=True)
 class Settings:
-    api_key: str
     mission_signing_secret: str
     engine_url: str
     engine_api_key: str
@@ -112,7 +111,6 @@ class Settings:
             runtime_port = _integer("SHERLOCK_PORT", 8787, 1, 65535)
 
         return cls(
-            api_key=_required("SHERLOCK_API_KEY", 24),
             mission_signing_secret=_required("SHERLOCK_MISSION_SIGNING_SECRET", 32),
             engine_url=engine_url,
             engine_api_key=_required("OSA_ACTIONS_API_KEY", 16),
