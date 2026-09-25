@@ -4,6 +4,7 @@ from dataclasses import replace
 
 from sherlock_osa import site_probe
 from sherlock_osa.site_probe import ProbeBatch, SiteDefinition
+from sherlock_osa.source_policy import is_blocked_public_source
 
 
 _BASE_LOADER = site_probe.load_site_definitions
@@ -36,7 +37,14 @@ def load_guarded_definitions(
     timeout_seconds: float = 12.0,
 ) -> tuple[list[SiteDefinition], tuple[dict[str, object], ...]]:
     definitions, datasets = _BASE_LOADER(timeout_seconds)
-    sanitized = [_sanitize_definition(definition) for definition in definitions]
+    sanitized = [
+        _sanitize_definition(definition)
+        for definition in definitions
+        if not is_blocked_public_source(
+            name=definition.name,
+            url=definition.url_pretty or definition.url_check,
+        )
+    ]
     return sanitized, datasets
 
 
