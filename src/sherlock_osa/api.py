@@ -185,16 +185,19 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
 
             if path == "/api/v1/search/stream":
                 search = getattr(service, "full_search", None)
+                streaming = callable(search)
+                if not streaming:
+                    search = getattr(service, "search", None)
                 if not callable(search):
                     raise SherlockError(
                         "SEARCH_UNAVAILABLE",
-                        "Full Search nie jest podpięty.",
+                        "Search runtime nie jest podpięty.",
                         status=503,
                     )
                 body = self._body_json()
                 self._start_sse()
                 try:
-                    result = search(body, event_sink=self._sse)
+                    result = search(body, event_sink=self._sse) if streaming else search(body)
                     self._sse("case_result", result)
                 except SherlockError as exc:
                     self._sse("error", exc.as_dict())
@@ -214,11 +217,13 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
                 return
 
             if path == "/api/v1/search":
-                search = getattr(service, "full_search", None)
+                search = getattr(service, "search", None)
+                if not callable(search):
+                    search = getattr(service, "full_search", None)
                 if not callable(search):
                     raise SherlockError(
                         "SEARCH_UNAVAILABLE",
-                        "Full Search nie jest podpięty.",
+                        "Search runtime nie jest podpięty.",
                         status=503,
                     )
                 self._json(200, search(self._body_json()))
