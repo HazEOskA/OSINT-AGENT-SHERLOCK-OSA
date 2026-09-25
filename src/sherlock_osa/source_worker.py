@@ -18,6 +18,7 @@ from typing import Any, Mapping
 from urllib.parse import urlsplit
 
 from sherlock_osa.source_pack import WORKER_PROTOCOL
+from sherlock_osa.source_policy import is_blocked_public_source
 
 
 USERNAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
@@ -85,6 +86,8 @@ def _assert_public_profile_url(value: str) -> str:
         raise ValueError("profile URL credentials are not allowed")
 
     host = (parsed.hostname or "").rstrip(".").casefold()
+    if is_blocked_public_source(url=candidate):
+        raise ValueError("profile source is blocked by policy")
     if not host or host == "localhost" or host.endswith(".localhost") or host.endswith(".local"):
         raise ValueError("profile URL host is not public")
 
@@ -383,7 +386,7 @@ def _profile_public_lookup(url: str, timeout_seconds: float) -> dict[str, object
             continue
         absolute = urllib.parse.urljoin(final_url, value.strip())
         valid = _valid_url(absolute)
-        if not valid:
+        if not valid or is_blocked_public_source(url=valid):
             continue
         linked_host = (urlsplit(valid).hostname or "").casefold()
         if valid == final_url or linked_host == host:
@@ -772,6 +775,8 @@ async def _maigret_lookup(username: str, timeout_seconds: float) -> dict[str, ob
             continue
         url = result.get("url_user")
         url_text = str(url) if isinstance(url, str) else ""
+        if is_blocked_public_source(name=site_name, url=url_text):
+            continue
         ids_data = result.get("ids_data")
         record = {
             "site": str(site_name)[:120],
