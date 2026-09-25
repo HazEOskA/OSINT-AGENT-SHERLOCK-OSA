@@ -704,6 +704,10 @@ function renderResult(bundle) {
   const summary = detective.summary || {};
   const report = bundle.report || {};
   const findings = detective.findings || [];
+  const candidateIds = new Set(report.candidate_finding_ids || []);
+  const primaryFindings = findings.filter(
+    (finding) => !candidateIds.has(finding.finding_id)
+  );
 
   $("#result-title").textContent =
     (bundle.query && bundle.query.value) || "Wynik śledztwa";
@@ -712,7 +716,7 @@ function renderResult(bundle) {
     report.summary || "Sherlock zakończył analizę.";
 
   $("#source-count").textContent = String(summary.sources_checked || 0);
-  $("#finding-count").textContent = String(summary.findings || findings.length || 0);
+  $("#finding-count").textContent = String(primaryFindings.length);
   $("#confirmed-count").textContent = String(summary.confirmed_findings || 0);
   $("#identifier-count").textContent = String(summary.identifiers_seen || 0);
   $("#duration-count").textContent =
@@ -720,13 +724,13 @@ function renderResult(bundle) {
   $("#link-count").textContent = String(
     report.hard_links !== undefined
       ? report.hard_links
-      : findings.reduce((total, finding) => {
+      : primaryFindings.reduce((total, finding) => {
           return total + (finding.sources || []).filter((source) => source.url).length;
         }, 0)
   );
 
   renderEmailOsint(bundle.emailosint || null, bundle.emailosint_error || null);
-  renderFindings(findings);
+  renderFindings(primaryFindings);
   renderIdentity(detective.identity_clusters || [], findings);
   renderTimeline(detective.timeline || []);
   renderSourceRuns(detective.source_runs || []);
