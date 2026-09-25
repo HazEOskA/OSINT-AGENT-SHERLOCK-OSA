@@ -116,6 +116,7 @@ class ProbeResult:
     reliability: float
     reason: str
     dataset_commit: str
+    is_nsfw: bool = False
     attribution: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
@@ -131,6 +132,7 @@ class ProbeResult:
             "reliability": self.reliability,
             "reason": self.reason,
             "dataset_commit": self.dataset_commit,
+            "is_nsfw": self.is_nsfw,
             "attribution": list(self.attribution),
         }
 
@@ -577,6 +579,7 @@ def _probe_one(definition: SiteDefinition, username: str, timeout_seconds: float
             reliability=0.0,
             reason="USERNAME_REGEX_REJECTED",
             dataset_commit=definition.dataset_commit,
+            is_nsfw=definition.is_nsfw,
             attribution=definition.attribution,
         )
 
@@ -594,6 +597,7 @@ def _probe_one(definition: SiteDefinition, username: str, timeout_seconds: float
             reliability=0.0,
             reason=reason,
             dataset_commit=definition.dataset_commit,
+            is_nsfw=definition.is_nsfw,
             attribution=definition.attribution,
         )
 
@@ -640,6 +644,7 @@ def _probe_one(definition: SiteDefinition, username: str, timeout_seconds: float
         reliability=round(reliability, 3),
         reason=reason,
         dataset_commit=definition.dataset_commit,
+        is_nsfw=definition.is_nsfw,
         attribution=definition.attribution,
     )
 
@@ -647,18 +652,18 @@ def _probe_one(definition: SiteDefinition, username: str, timeout_seconds: float
 def _priority(definition: SiteDefinition) -> tuple[int, float, str]:
     category_order = {
         "GOOGLE": 0,
-        "DATING": 1,
-        "SOCIAL": 2,
-        "MESSAGING": 3,
-        "DEVELOPER": 4,
-        "GAMING": 5,
-        "MUSIC": 6,
-        "VIDEO": 7,
-        "SHOPPING": 8,
-        "FINANCE": 9,
-        "FORUMS": 10,
-        "OTHER": 11,
-        "ADULT": 12,
+        "SOCIAL": 1,
+        "ADULT": 2,
+        "DATING": 3,
+        "MESSAGING": 4,
+        "DEVELOPER": 5,
+        "FORUMS": 6,
+        "GAMING": 7,
+        "MUSIC": 8,
+        "VIDEO": 9,
+        "SHOPPING": 10,
+        "FINANCE": 11,
+        "OTHER": 12,
     }
     return (
         category_order.get(definition.category, 99),
