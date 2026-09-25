@@ -44,6 +44,8 @@ _HINT_MAP = {
     "images": "SOCIAL",
     "news": "SOCIAL",
     "tech": "DEVELOPER",
+    "adult": "ADULT",
+    "nsfw": "ADULT",
     "xx nsfw xx": "ADULT",
 }
 
