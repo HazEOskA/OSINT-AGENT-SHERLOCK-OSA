@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hmac
 import json
 import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -69,19 +68,6 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
             self.wfile.write(frame)
             self.wfile.flush()
 
-        def _authorised(self) -> bool:
-            expected = f"Bearer {service.settings.api_key}"
-            supplied = self.headers.get("Authorization", "")
-            return hmac.compare_digest(expected, supplied)
-
-        def _require_auth(self) -> None:
-            if not self._authorised():
-                raise SherlockError(
-                    "UNAUTHORIZED",
-                    "Wymagany poprawny operator Bearer token.",
-                    status=401,
-                )
-
         def _body_json(self) -> object:
             raw_length = self.headers.get("Content-Length")
             if raw_length is None:
@@ -113,17 +99,7 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
             try:
                 callback()
             except SherlockError as exc:
-                if exc.status == 401:
-                    self.send_response(exc.status)
-                    self._security_headers()
-                    self.send_header("WWW-Authenticate", 'Bearer realm="sherlock-osa"')
-                    body = json.dumps(exc.as_dict(), ensure_ascii=False).encode("utf-8")
-                    self.send_header("Content-Type", "application/json; charset=utf-8")
-                    self.send_header("Content-Length", str(len(body)))
-                    self.end_headers()
-                    self.wfile.write(body)
-                else:
-                    self._json(exc.status, exc.as_dict())
+                self._json(exc.status, exc.as_dict())
             except Exception:
                 self._json(
                     500,
@@ -142,8 +118,6 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
                 return
             if path == "/api/v1/health":
                 probe = query.get("probe_engine", ["false"])[0].lower() == "true"
-                if probe:
-                    self._require_auth()
                 payload = service.health(probe_engine=probe)
                 if isinstance(payload, dict):
                     payload = dict(payload)
@@ -163,7 +137,6 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
                 self._json(200, service.reference_repositories())
                 return
 
-            self._require_auth()
             if path == "/api/v1/capabilities":
                 self._json(200, service.capabilities())
                 return
@@ -196,8 +169,6 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
             path, _ = self._request_target()
 
             if path == "/api/v1/lookup/email":
-                if getattr(service.settings, "emailosint_api_key", ""):
-                    self._require_auth()
                 client = EmailOsintClient.from_settings(service.settings)
                 self._json(200, client.lookup(self._body_json()))
                 return
@@ -209,7 +180,6 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
                 self._json(200, demo_replay(self._body_json()))
                 return
 
-            self._require_auth()
 
             if path == "/api/v1/search/stream":
                 search = getattr(service, "full_search", None)
