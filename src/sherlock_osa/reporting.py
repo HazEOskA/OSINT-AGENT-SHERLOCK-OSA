@@ -14,27 +14,47 @@ def build_human_report(
     summary = investigation.summary
     findings = investigation.findings
 
-    strong = [
+    supported_cluster_ids = {
+        finding_id
+        for cluster in investigation.identity_clusters
+        if cluster.status in {"SUPPORTED", "STRONG"}
+        for finding_id in cluster.finding_ids
+    }
+    candidate_prefixes = ("maigret.", "socialmesh.", "profile.")
+    candidate_findings = [
         finding
         for finding in findings
+        if finding.kind in {"URL", "ACCOUNT", "USERNAME"}
+        and finding.finding_id not in supported_cluster_ids
+        and finding.sources
+        and all(source.source.startswith(candidate_prefixes) for source in finding.sources)
+    ]
+    candidate_ids = {finding.finding_id for finding in candidate_findings}
+    primary_findings = [
+        finding for finding in findings if finding.finding_id not in candidate_ids
+    ]
+
+    strong = [
+        finding
+        for finding in primary_findings
         if finding.status.value in {"CONFIRMED", "PROBABLE"}
     ]
     possible = [
         finding
-        for finding in findings
+        for finding in primary_findings
         if finding.status.value == "POSSIBLE"
     ]
 
     hard_links = sum(
         1
-        for finding in findings
+        for finding in primary_findings
         for source in finding.sources
         if source.url
     )
 
     if strong:
         headline = f"Znalazłem {len(strong)} ustaleń wspartych dowodami dla: {query}"
-    elif findings:
+    elif primary_findings:
         headline = f"Znalazłem ślady dla: {query}, ale nie spełniają progu mocnego potwierdzenia"
     else:
         headline = f"Brak pozytywnie zweryfikowanych śladów dla: {query}"
@@ -43,10 +63,16 @@ def build_human_report(
         f"Sprawdziłem {summary.sources_checked} przebiegów źródłowych i wykonałem "
         f"{summary.module_invocations} zapytań.",
         f"Po odrzuceniu wyników negatywnych, niejednoznacznych i niewiarygodnych zostało "
-        f"{summary.findings} ustaleń, w tym {summary.confirmed_findings} potwierdzonych.",
+        f"{len(primary_findings)} głównych ustaleń, w tym "
+        f"{sum(1 for finding in primary_findings if finding.status.value == 'CONFIRMED')} potwierdzonych.",
         f"Dostępnych jest {hard_links} klikalnych linków do dowodów.",
         "Truth Engine V4 nie traktuje HTTP 200 ani samego zakończenia źródła jako dowodu istnienia konta.",
     ]
+    if candidate_findings:
+        sentences.append(
+            f"{len(candidate_findings)} pojedynczych profili pozostawiono jako kandydatów "
+            "i nie pokazano ich jako spiętej tożsamości bez mocniejszego wspólnego dowodu."
+        )
     if summary.sources_skipped:
         sentences.append(
             f"{summary.sources_skipped} źródeł pominięto, najczęściej przez brak klucza "
@@ -65,7 +91,7 @@ def build_human_report(
 
     highlights: list[dict[str, object]] = []
     for finding in sorted(
-        findings,
+        primary_findings,
         key=lambda item: (
             item.status.value not in {"CONFIRMED", "PROBABLE"},
             -item.confidence,
@@ -104,6 +130,26 @@ def build_human_report(
             }
         )
 
+    candidates = [
+        {
+            "finding_id": finding.finding_id,
+            "title": finding.title,
+            "kind": finding.kind,
+            "value": finding.value,
+            "status": "CANDIDATE",
+            "confidence": finding.confidence,
+            "links": [
+                {"source": source.source, "url": source.url}
+                for source in finding.sources
+                if source.url
+            ][:12],
+        }
+        for finding in sorted(
+            candidate_findings,
+            key=lambda item: (-item.confidence, item.kind, item.value),
+        )[:100]
+    ]
+
     warnings = _warnings(investigation)
 
     return {
@@ -121,6 +167,9 @@ def build_human_report(
         "possible_findings": len(possible),
         "hard_links": hard_links,
         "highlights": highlights,
+        "candidate_finding_ids": sorted(candidate_ids),
+        "candidate_count": len(candidate_findings),
+        "candidates": candidates,
         "warnings": warnings,
     }
 
