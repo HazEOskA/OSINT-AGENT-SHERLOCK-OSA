@@ -226,6 +226,26 @@ class PoisonChecker:
             return str(value)[:20000]
 
 
+_STRUCTURAL_URL_SEGMENTS = frozenset({
+    "account",
+    "accounts",
+    "auth",
+    "home",
+    "login",
+    "member",
+    "members",
+    "people",
+    "profile",
+    "profiles",
+    "search",
+    "signup",
+    "sign-up",
+    "u",
+    "user",
+    "users",
+})
+
+
 class SeedExpansionModule:
     """Local deterministic pivots. No network. Useful as the first correlation layer."""
 
@@ -257,7 +277,10 @@ class SeedExpansionModule:
         path_parts = [part for part in parsed.path.split("/") if part]
         if path_parts:
             candidate = path_parts[-1]
-            if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{1,63}", candidate):
+            if (
+                candidate.casefold() not in _STRUCTURAL_URL_SEGMENTS
+                and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{1,63}", candidate)
+            ):
                 pivots.append(ResearchIdentifier(IdentifierKind.USERNAME, candidate))
         return ModuleResult(
             fields={"host": host, "path": parsed.path, "scheme": parsed.scheme},
