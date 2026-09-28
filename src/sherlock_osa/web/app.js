@@ -882,15 +882,6 @@ async function runSearch(event) {
 
   const form = event.currentTarget;
   const token = operatorToken();
-  if (!token) {
-    $("#operator-settings").open = true;
-    toast(
-      "Wpisz Sherlock API key. Po pierwszym udanym wyszukiwaniu zostanie zapamiętany.",
-      true
-    );
-    return;
-  }
-
   const button = $("#search-submit");
   const note = $("#search-note");
   const liveBox = $("#live-box");
