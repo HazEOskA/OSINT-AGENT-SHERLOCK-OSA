@@ -59,29 +59,3 @@ class handler(_BaseHandler):
         if path in {"/api/v1/search", "/api/v1/search/stream"}:
             return True
         return super()._authorised()
-
-    def _do_get(self) -> None:
-        path, _ = self._request_target()
-        if path == "/api/v1/_pivot-smoke":
-            events = []
-            def sink(event, payload):
-                if event == "pivot_discovered":
-                    events.append(dict(payload))
-            result = _service.full_search(
-                {"kind": "USERNAME", "mode": "QUICK", "query": "octocat"},
-                event_sink=sink,
-            )
-            username_pivots = [
-                item.get("value")
-                for item in events
-                if str(item.get("kind", "")).upper() == "USERNAME"
-            ]
-            self._json(200, {
-                "ok": "members" not in [str(v).casefold() for v in username_pivots if v],
-                "query": result.get("query"),
-                "username_pivots": username_pivots,
-                "members_present": "members" in [str(v).casefold() for v in username_pivots if v],
-                "summary": result.get("detective", {}).get("summary", {}),
-            })
-            return
-        return super()._do_get()
