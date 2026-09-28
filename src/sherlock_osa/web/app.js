@@ -703,6 +703,186 @@ function renderGraph(graph) {
   }
 }
 
+function renderProofReport(report) {
+  const section = $("#proof-report-section");
+  const claims = (report && report.claims) || [];
+  const summary = (report && report.summary) || {};
+  const integrity = (report && report.integrity) || {};
+  const coverage = (report && report.tool_coverage) || [];
+
+  if (!report) {
+    section.hidden = true;
+    return;
+  }
+
+  section.hidden = false;
+  $("#proof-report-hash").textContent =
+    integrity.proof_report_sha256
+      ? "SHA256 " + String(integrity.proof_report_sha256).slice(0, 16) + "…"
+      : "NO HASH";
+  $("#proof-claim-count").textContent = String(summary.claims || claims.length || 0);
+  $("#proof-fact-count").textContent = String(summary.facts || 0);
+  $("#proof-correlated-count").textContent = String(summary.correlated || 0);
+  $("#proof-hypothesis-count").textContent = String(summary.hypotheses || 0);
+  $("#proof-tools-count").textContent = String(summary.tools_executed || 0);
+
+  const container = $("#proof-claims");
+  container.replaceChildren();
+
+  if (!claims.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-item";
+    empty.textContent = "Brak claimów z materiałem dowodowym.";
+    container.append(empty);
+  }
+
+  for (const claim of claims.slice(0, 220)) {
+    const card = document.createElement("article");
+    card.className = "proof-card";
+    card.dataset.assertion = claim.assertion || "HYPOTHESIS";
+
+    const head = document.createElement("div");
+    head.className = "proof-card-head";
+
+    const titleWrap = document.createElement("div");
+    const kind = document.createElement("small");
+    kind.textContent =
+      String(claim.kind || "CLAIM") +
+      " · " +
+      String(claim.status || "UNKNOWN") +
+      " · " +
+      String(claim.evidence_strength || "LEAD_ONLY");
+    const title = document.createElement("h4");
+    title.textContent = claim.title || claim.value || "Claim";
+    titleWrap.append(kind, title);
+
+    const assertion = document.createElement("b");
+    assertion.className =
+      "proof-assertion " + String(claim.assertion || "HYPOTHESIS").toLowerCase();
+    assertion.textContent = claim.assertion || "HYPOTHESIS";
+    head.append(titleWrap, assertion);
+
+    const value = document.createElement("p");
+    value.className = "proof-value";
+    value.textContent = claim.value || "";
+
+    const explanation = document.createElement("p");
+    explanation.className = "proof-explanation";
+    explanation.textContent = claim.explanation || "";
+
+    const meta = document.createElement("p");
+    meta.className = "proof-meta";
+    meta.textContent =
+      "Niezależne rodziny źródeł: " +
+      String(claim.independent_source_count || 0) +
+      " · evidence records: " +
+      String(claim.evidence_count || 0) +
+      " · confidence: " +
+      String(Math.round(Number(claim.confidence || 0) * 100)) +
+      "% · claim SHA256: " +
+      String(claim.claim_sha256 || "").slice(0, 20) +
+      "…";
+
+    const boundary = document.createElement("div");
+    boundary.className = "proof-boundary";
+
+    const supports = document.createElement("div");
+    supports.className = "supports";
+    const supportsTitle = document.createElement("b");
+    supportsTitle.textContent = "CO TEN MATERIAŁ WSPIERA";
+    const supportsText = document.createElement("p");
+    supportsText.textContent = claim.supports || "";
+    supports.append(supportsTitle, supportsText);
+
+    const limits = document.createElement("div");
+    limits.className = "limits";
+    const limitsTitle = document.createElement("b");
+    limitsTitle.textContent = "CZEGO NIE DOWODZI";
+    const limitsText = document.createElement("p");
+    limitsText.textContent = claim.does_not_establish || "";
+    limits.append(limitsTitle, limitsText);
+
+    boundary.append(supports, limits);
+    card.append(head, value, explanation, meta, boundary);
+
+    const evidenceList = document.createElement("div");
+    evidenceList.className = "proof-evidence-list";
+
+    for (const evidence of (claim.evidence || []).slice(0, 40)) {
+      const item = document.createElement("article");
+      item.className = "proof-evidence";
+
+      const source = document.createElement("div");
+      const sourceName = document.createElement("strong");
+      sourceName.textContent = evidence.source || "source";
+      const sourceMeta = document.createElement("p");
+      sourceMeta.textContent =
+        (evidence.source_family || "source") +
+        " · confidence " +
+        String(Math.round(Number(evidence.confidence || 0) * 100)) +
+        "%";
+      source.append(sourceName, sourceMeta);
+
+      const meaning = document.createElement("div");
+      const what = document.createElement("strong");
+      what.textContent = evidence.what_is_this || "Źródło dowodowe";
+      const when = document.createElement("p");
+      when.textContent =
+        (evidence.collected_at ? "zebrano: " + evidence.collected_at : "") +
+        (evidence.evidence_id ? " · evidence_id: " + evidence.evidence_id : "");
+      const hash = document.createElement("code");
+      hash.textContent = "sha256: " + String(evidence.evidence_sha256 || "");
+      meaning.append(what, when, hash);
+
+      item.append(source, meaning);
+
+      if (evidence.url) {
+        const link = document.createElement("a");
+        link.href = evidence.url;
+        link.target = "_blank";
+        link.rel = "noreferrer noopener";
+        link.textContent = "DOWÓD ↗";
+        item.append(link);
+      } else {
+        const noLink = document.createElement("span");
+        noLink.className = "no-hard-link";
+        noLink.textContent = "NO DIRECT URL";
+        item.append(noLink);
+      }
+
+      evidenceList.append(item);
+    }
+
+    card.append(evidenceList);
+    container.append(card);
+  }
+
+  const toolList = $("#proof-tool-coverage");
+  toolList.replaceChildren();
+  for (const tool of coverage) {
+    const item = document.createElement("article");
+    item.className =
+      "tool-run " +
+      (tool.execution === "EXECUTED" ? "executed" : "not-executed");
+
+    const name = document.createElement("strong");
+    name.textContent = tool.tool || "unknown";
+    const meta = document.createElement("p");
+    meta.textContent =
+      (tool.source_family || "source") +
+      " · evidence " +
+      String(tool.evidence_count || 0) +
+      (tool.duration_ms ? " · " + String(tool.duration_ms) + " ms" : "") +
+      (tool.reason ? " · " + tool.reason : "");
+    const status = document.createElement("b");
+    status.textContent =
+      String(tool.status || "UNKNOWN") + " / " + String(tool.execution || "NOT_EXECUTED");
+
+    item.append(name, meta, status);
+    toolList.append(item);
+  }
+}
+
 function renderWarnings(bundle) {
   const warnings = [];
 
@@ -765,6 +945,7 @@ function renderResult(bundle) {
   renderIdentity(detective.identity_clusters || [], findings);
   renderTimeline(detective.timeline || []);
   renderSourceRuns(detective.source_runs || []);
+  renderProofReport(bundle.proof_report || null);
   renderWarnings(bundle);
 
   const graph = detective.graph || {};
