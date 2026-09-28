@@ -227,23 +227,51 @@ class PoisonChecker:
 
 
 _STRUCTURAL_URL_SEGMENTS = frozenset({
+    "about",
     "account",
     "accounts",
+    "api",
     "auth",
+    "blog",
+    "contact",
+    "discover",
+    "explore",
+    "feed",
+    "help",
     "home",
     "login",
     "member",
     "members",
     "people",
+    "posts",
+    "privacy",
     "profile",
     "profiles",
     "search",
+    "settings",
     "signup",
     "sign-up",
+    "status",
+    "support",
+    "terms",
     "u",
     "user",
     "users",
 })
+
+_NON_USERNAME_PATH_SUFFIXES = (
+    ".aspx",
+    ".atom",
+    ".css",
+    ".htm",
+    ".html",
+    ".js",
+    ".json",
+    ".php",
+    ".rss",
+    ".txt",
+    ".xml",
+)
 
 
 class SeedExpansionModule:
@@ -277,8 +305,10 @@ class SeedExpansionModule:
         path_parts = [part for part in parsed.path.split("/") if part]
         if path_parts:
             candidate = path_parts[-1]
+            candidate_folded = candidate.casefold()
             if (
-                candidate.casefold() not in _STRUCTURAL_URL_SEGMENTS
+                candidate_folded not in _STRUCTURAL_URL_SEGMENTS
+                and not candidate_folded.endswith(_NON_USERNAME_PATH_SUFFIXES)
                 and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{1,63}", candidate)
             ):
                 pivots.append(ResearchIdentifier(IdentifierKind.USERNAME, candidate))

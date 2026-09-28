@@ -35,6 +35,24 @@ class SeedExpansionStructuralPathTests(unittest.TestCase):
         ]
         self.assertEqual(usernames, [])
 
+    def test_about_path_is_not_promoted_to_username(self) -> None:
+        result = self._lookup("https://example.com/about")
+        usernames = [
+            pivot.value
+            for pivot in result.pivots
+            if pivot.kind is IdentifierKind.USERNAME
+        ]
+        self.assertEqual(usernames, [])
+
+    def test_file_like_path_is_not_promoted_to_username(self) -> None:
+        result = self._lookup("https://example.com/octocat.json")
+        usernames = [
+            pivot.value
+            for pivot in result.pivots
+            if pivot.kind is IdentifierKind.USERNAME
+        ]
+        self.assertEqual(usernames, [])
+
     def test_real_username_after_members_path_is_kept(self) -> None:
         result = self._lookup("https://example.com/members/realnick")
         usernames = [
