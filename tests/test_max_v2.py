@@ -73,15 +73,11 @@ def make_finding(
 
 
 class MaxSourceRegistryTests(unittest.TestCase):
-    def test_registry_v4_exposes_sources_and_truthful_key_gate(self) -> None:
+    def test_registry_v3_exposes_new_sources_and_truthful_key_gate(self) -> None:
         with patch.dict(os.environ, {}, clear=False):
             health = source_health()
         names = {item["name"] for item in health["sources"]}
-        self.assertEqual(health["registry_version"], "v4")
-        self.assertEqual(health["truth_engine"], "SHERLOCK_TRUTH_ENGINE_V4")
-        self.assertFalse(health["truth_contract"]["completed_is_found"])
-        self.assertFalse(health["truth_contract"]["http_200_is_found"])
-        self.assertFalse(health["truth_contract"]["aggregator_duplicates_are_independent"])
+        self.assertEqual(health["registry_version"], "v3")
         self.assertIn("gravatar.email", names)
         self.assertIn("github.username", names)
         self.assertIn("gitlab.username", names)
@@ -91,7 +87,6 @@ class MaxSourceRegistryTests(unittest.TestCase):
         self.assertIn("socialmesh.username", names)
         hibp = next(item for item in health["sources"] if item["name"] == "hibp.account")
         self.assertTrue(hibp["requires_key"])
-        self.assertEqual(hibp["truth_state"], "RUNTIME_CANARY_REQUIRED")
 
     def test_planner_skips_hibp_without_key_and_quick_skips_archive(self) -> None:
         phone = ResearchIdentifier(IdentifierKind.PHONE, "+31612345678")
@@ -114,7 +109,6 @@ class MaxSourceRegistryTests(unittest.TestCase):
         )
         self.assertEqual(len(modules), 1)
         self.assertTrue(direct_decisions[0].run)
-        self.assertEqual(direct_decisions[0].reason, "PLANNED_RUNTIME_TRUTH_REQUIRED")
 
     def test_phone_normalization_is_international_and_deterministic(self) -> None:
         self.assertEqual(normalize_phone("+31 6 12345678"), "+31612345678")
@@ -183,7 +177,6 @@ class MaxIdentityAndGraphTests(unittest.TestCase):
         clusters = IdentityResolver().resolve(findings, (relation,))
         self.assertEqual(len(clusters), 1)
         self.assertIn(clusters[0].status, {"SUPPORTED", "STRONG"})
-        self.assertIn("SAME_HARD_SOURCE_URL", clusters[0].reasons)
 
     def test_graph_separates_findings_from_evidence_nodes(self) -> None:
         finding = make_finding(

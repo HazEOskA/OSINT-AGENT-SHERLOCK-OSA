@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+import secrets
+from dataclasses import dataclass, field
 from datetime import timedelta
 from importlib.resources import files
 from tempfile import TemporaryDirectory
@@ -45,6 +46,7 @@ PUBLIC_DEMO_CAPABILITIES = frozenset(
 class PublicDemoSettings:
     """Only the small settings surface consumed by the shared HTTP handler."""
 
+    api_key: str = field(default_factory=lambda: secrets.token_urlsafe(48))
     max_body_bytes: int = 65_536
 
 

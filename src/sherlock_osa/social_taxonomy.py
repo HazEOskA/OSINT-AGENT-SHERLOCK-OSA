@@ -21,15 +21,6 @@ SOCIAL_CATEGORIES = (
     "OTHER",
 )
 
-NSFW_BUCKETS = (
-    "CREATOR_PLATFORMS",
-    "ADULT_COMMUNITIES",
-    "DATING_SEXUAL_OVERLAP",
-    "LINK_IN_BIO_MONETIZATION",
-    "HISTORICAL_ARCHIVE",
-    "OTHER_ADULT",
-)
-
 _HINT_MAP = {
     "social": "SOCIAL",
     "dating": "DATING",
@@ -44,8 +35,6 @@ _HINT_MAP = {
     "images": "SOCIAL",
     "news": "SOCIAL",
     "tech": "DEVELOPER",
-    "adult": "ADULT",
-    "nsfw": "ADULT",
     "xx nsfw xx": "ADULT",
 }
 
@@ -199,17 +188,6 @@ _KEYWORDS = {
     "ADULT": (
         "onlyfans",
         "fansly",
-        "fanvue",
-        "loyalfans",
-        "fancentro",
-        "manyvids",
-        "clips4sale",
-        "pornhub",
-        "xhamster",
-        "redgifs",
-        "erome",
-        "imagefap",
-        "fetlife",
         "porn",
         "nsfw",
         "adult",
@@ -217,54 +195,6 @@ _KEYWORDS = {
         "all things worn",
         "allthingsworn",
         "apclips",
-    ),
-}
-
-_NSFW_BUCKET_KEYWORDS = {
-    "CREATOR_PLATFORMS": (
-        "onlyfans",
-        "fansly",
-        "fanvue",
-        "loyalfans",
-        "fancentro",
-        "manyvids",
-        "clips4sale",
-        "admireme",
-        "apclips",
-    ),
-    "ADULT_COMMUNITIES": (
-        "pornhub",
-        "xhamster",
-        "redgifs",
-        "erome",
-        "imagefap",
-        "fetlife",
-        "adult forum",
-        "nsfw forum",
-    ),
-    "DATING_SEXUAL_OVERLAP": (
-        "adultfriendfinder",
-        "friendfinder",
-        "fetlife",
-        "feeld",
-        "grindr",
-        "taimi",
-    ),
-    "LINK_IN_BIO_MONETIZATION": (
-        "allmylinks",
-        "linktree",
-        "beacons",
-        "link in bio",
-        "monetization",
-        "tip link",
-    ),
-    "HISTORICAL_ARCHIVE": (
-        "wayback",
-        "archive.org",
-        "common crawl",
-        "commoncrawl",
-        "historical",
-        "archive",
     ),
 }
 
@@ -321,30 +251,6 @@ def classify_service(
     return "OTHER"
 
 
-def classify_sensitive_bucket(
-    name: object,
-    *,
-    url: object = "",
-    origin: object = "",
-) -> str:
-    """Classify an already-sensitive signal without asserting identity or activity.
-
-    This helper is deliberately narrower than ``classify_service``. It does not
-    promote a normal dating/social service into ADULT. The caller must first
-    establish that the record belongs to the ADULT category from source metadata
-    or an explicit adult-service match.
-    """
-
-    service = normalise_service_name(name)
-    haystack = f"{service} {str(url or '')} {str(origin or '')}".casefold()
-    for bucket in NSFW_BUCKETS:
-        if bucket == "OTHER_ADULT":
-            continue
-        if any(keyword in haystack for keyword in _NSFW_BUCKET_KEYWORDS[bucket]):
-            return bucket
-    return "OTHER_ADULT"
-
-
 def signal_presence_status(value: object) -> str:
     if not isinstance(value, Mapping):
         return "OBSERVED"
@@ -377,7 +283,7 @@ def signal_presence_status(value: object) -> str:
         return "FOUND"
     if status in {"not_found", "missing", "unclaimed", "available"}:
         return "NOT_FOUND"
-    if status in {"blocked", "captcha", "rate_limited", "timeout", "error", "unreliable"}:
+    if status in {"blocked", "captcha", "rate_limited", "timeout", "error"}:
         return status.upper()
 
     return "OBSERVED"

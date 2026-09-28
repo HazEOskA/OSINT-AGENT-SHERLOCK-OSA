@@ -6,12 +6,9 @@ from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Sequence
 from urllib.parse import urlsplit
 
-from sherlock_osa.source_policy import is_blocked_public_source
 from sherlock_osa.social_taxonomy import (
-    NSFW_BUCKETS,
     SOCIAL_CATEGORIES,
     categorise_accounts,
-    classify_sensitive_bucket,
     classify_service,
     normalise_service_name,
     signal_presence_status,
@@ -65,12 +62,9 @@ _STATUS_RANK = {
     "FOUND": 0,
     "OBSERVED": 1,
     "UNKNOWN": 2,
-    "UNRELIABLE": 3,
-    "RATE_LIMITED": 4,
-    "BLOCKED": 5,
-    "TIMEOUT": 6,
-    "ERROR": 7,
-    "NOT_FOUND": 8,
+    "RATE_LIMITED": 3,
+    "BLOCKED": 4,
+    "NOT_FOUND": 5,
 }
 
 
@@ -191,7 +185,6 @@ def _looks_like_service_record(mapping: Mapping[str, Any], fallback_name: str = 
         "not_found",
         "unclaimed",
         "status",
-        "truth_verdict",
     }
     if presence_keys.intersection({str(key).casefold() for key in mapping}):
         return True
@@ -214,8 +207,6 @@ def _account_from_mapping(
     if not service:
         return None
     profile_url = _profile_url(mapping)
-    if is_blocked_public_source(name=service, url=profile_url):
-        return None
     category = classify_service(
         service,
         url=profile_url,
@@ -285,46 +276,62 @@ def _walk_service_records(
 
 
 def _emailosint_accounts(emailosint: object) -> list[SocialAccount]:
-    """Consume only normalized EmailOSINT identity signals.
-
-    Provider raw payload is preserved elsewhere for audit/debugging but is not walked
-    as account evidence. This prevents metadata, AI prose, breach URLs or generic
-    profile-like objects from silently becoming social-account claims.
-    """
-
     if not isinstance(emailosint, Mapping):
         return []
     accounts: list[SocialAccount] = []
 
     identity = emailosint.get("identity")
-    if not isinstance(identity, Mapping):
-        return accounts
-    signals = identity.get("signals")
-    if not isinstance(signals, list):
-        return accounts
+    if isinstance(identity, Mapping):
+        signals = identity.get("signals")
+        if isinstance(signals, list):
+            for signal in signals:
+                if not isinstance(signal, Mapping):
+                    continue
+                fields = signal.get("fields")
+                payload = signal.get("provider_payload")
+                base = payload if isinstance(payload, Mapping) else fields if isinstance(fields, Mapping) else signal
+                source_name = _string(signal.get("source")) or "EmailOSINT"
+                if isinstance(base, Mapping):
+                    account = _account_from_mapping(
+                        base,
+                        fallback_service=source_name,
+                        source="EmailOSINT",
+                        origin="emailosint.identity.signals",
+                        confidence=0.96 if str(signal.get("status")) == "FOUND" else 0.72,
+                        forced_status=str(signal.get("status")) if signal.get("status") else None,
+                    )
+                    if account:
+                        accounts.append(account)
 
-    for signal in signals:
-        if not isinstance(signal, Mapping):
-            continue
-        status = str(signal.get("status", "OBSERVED")).upper()
-        if status not in _STATUS_RANK:
-            status = "UNKNOWN"
-        fields = signal.get("fields")
-        payload = signal.get("provider_payload")
-        base = payload if isinstance(payload, Mapping) else fields if isinstance(fields, Mapping) else signal
-        source_name = _string(signal.get("source")) or "EmailOSINT"
-        if not isinstance(base, Mapping):
-            continue
-        account = _account_from_mapping(
-            base,
-            fallback_service=source_name,
-            source="EmailOSINT",
-            origin="emailosint.identity.signals.v4",
-            confidence=0.96 if status == "FOUND" else 0.35 if status == "OBSERVED" else 0.1,
-            forced_status=status,
+    provider = emailosint.get("provider")
+    if isinstance(provider, Mapping):
+        events = provider.get("events")
+        if isinstance(events, list):
+            for event in events[:1000]:
+                if not isinstance(event, Mapping):
+                    continue
+                event_name = _string(event.get("event"))
+                data = event.get("data")
+                fallback = event_name if classify_service(event_name) != "OTHER" else ""
+                accounts.extend(
+                    _walk_service_records(
+                        data,
+                        source="EmailOSINT",
+                        origin=f"emailosint.event.{event_name or 'message'}",
+                        fallback_service=fallback,
+                        confidence=0.9,
+                        limit=500,
+                    )
+                )
+        accounts.extend(
+            _walk_service_records(
+                provider.get("raw"),
+                source="EmailOSINT",
+                origin="emailosint.provider.raw",
+                confidence=0.82,
+                limit=700,
+            )
         )
-        if account:
-            accounts.append(account)
     return accounts
 
 
@@ -364,7 +371,6 @@ def _socialmesh_accounts(sensor_payloads: object) -> list[SocialAccount]:
                         service,
                         url=profile_url,
                         category_hint=item.get("category", ""),
-                        is_nsfw=bool(item.get("is_nsfw", item.get("isNSFW", False))),
                     ),
                     status="FOUND",
                     source="Sherlock Social Mesh",
@@ -377,7 +383,7 @@ def _socialmesh_accounts(sensor_payloads: object) -> list[SocialAccount]:
                         if url.startswith(("http://", "https://"))
                     ),
                     fields=dict(item),
-                    origin="socialmesh.username.truth-v4",
+                    origin="socialmesh.username",
                 )
             )
     return accounts
@@ -398,16 +404,11 @@ def _direct_source_accounts(sensor_payloads: object) -> list[SocialAccount]:
         fields = record.get("fields")
         if not isinstance(fields, Mapping):
             continue
-        truth_verdict = _string(fields.get("truth_verdict")).upper()
-        if truth_verdict in {"UNRELIABLE", "ERROR", "BLOCKED", "RATE_LIMITED", "TIMEOUT"}:
-            continue
         confidence_raw = record.get("confidence", 0.72)
         confidence = float(confidence_raw) if isinstance(confidence_raw, (int, float)) else 0.72
         seed_username = _string(record.get("identifier_value")) if record.get("identifier_kind") == "USERNAME" else ""
 
         if source == "holehe.email":
-            if truth_verdict and truth_verdict != "FOUND":
-                continue
             registered = fields.get("registered")
             if isinstance(registered, list):
                 for item in registered[:256]:
@@ -416,8 +417,8 @@ def _direct_source_accounts(sensor_payloads: object) -> list[SocialAccount]:
                     account = _account_from_mapping(
                         item,
                         source="Holehe",
-                        origin="holehe.registered.truth-v4",
-                        confidence=confidence,
+                        origin="holehe.registered",
+                        confidence=max(0.75, confidence),
                         forced_status="FOUND",
                     )
                     if account:
@@ -425,8 +426,6 @@ def _direct_source_accounts(sensor_payloads: object) -> list[SocialAccount]:
             continue
 
         if source == "maigret.username":
-            if truth_verdict and truth_verdict != "FOUND":
-                continue
             profiles = fields.get("profiles")
             if isinstance(profiles, list):
                 for item in profiles[:256]:
@@ -436,8 +435,8 @@ def _direct_source_accounts(sensor_payloads: object) -> list[SocialAccount]:
                         item,
                         fallback_service=_string(item.get("site")),
                         source="Maigret",
-                        origin="maigret.profiles.truth-v4",
-                        confidence=confidence,
+                        origin="maigret.profiles",
+                        confidence=max(0.7, confidence),
                         forced_status="FOUND",
                         forced_username=seed_username,
                     )
@@ -471,32 +470,12 @@ def _direct_source_accounts(sensor_payloads: object) -> list[SocialAccount]:
                         _walk_service_records(
                             profile,
                             source="Gravatar",
-                            origin="gravatar.profile.truth-v4",
+                            origin="gravatar.profile",
                             fallback_service="Gravatar",
                             confidence=confidence,
                             limit=128,
                         )
                     )
-            continue
-
-        if source == "profile.public":
-            if fields.get("found") is not True:
-                continue
-            profile = fields.get("profile")
-            if not isinstance(profile, Mapping):
-                continue
-            service = _string(profile.get("service")) or "Public profile"
-            account = _account_from_mapping(
-                profile,
-                fallback_service=service,
-                source="Profile Enrichment",
-                origin="profile.public.truth-v4",
-                confidence=confidence,
-                forced_status="FOUND",
-                forced_username=_string(profile.get("candidate_username")),
-            )
-            if account:
-                accounts.append(account)
             continue
 
     return accounts
@@ -546,72 +525,6 @@ def _dedupe_accounts(accounts: Iterable[SocialAccount]) -> list[SocialAccount]:
     )
 
 
-def _sensitive_intelligence(account_dicts: Sequence[Mapping[str, Any]]) -> dict[str, object]:
-    visible: list[dict[str, object]] = []
-    sections: dict[str, list[dict[str, object]]] = {bucket: [] for bucket in NSFW_BUCKETS}
-
-    for account in account_dicts:
-        if account.get("category") != "ADULT" or account.get("status") == "NOT_FOUND":
-            continue
-        item = dict(account)
-        bucket = classify_sensitive_bucket(
-            item.get("service", "unknown"),
-            url=item.get("profile_url", ""),
-            origin=item.get("origin", ""),
-        )
-        urls = [
-            url
-            for url in [item.get("profile_url"), *(item.get("evidence_urls") or [])]
-            if isinstance(url, str) and url.startswith(("http://", "https://"))
-        ]
-        status = str(item.get("status") or "OBSERVED")
-        item["sensitive_bucket"] = bucket
-        item["evidence_tier"] = (
-            "DIRECT_PUBLIC_SIGNAL"
-            if status == "FOUND" and bool(urls)
-            else "SOURCE_SIGNAL"
-            if status == "FOUND"
-            else "OBSERVED_ONLY"
-        )
-        item["media_autoload"] = False
-        visible.append(item)
-        sections[bucket].append(item)
-
-    status_counts = Counter(str(item.get("status") or "OBSERVED") for item in visible)
-    direct_public = sum(
-        1 for item in visible if item.get("evidence_tier") == "DIRECT_PUBLIC_SIGNAL"
-    )
-    found_total = int(status_counts.get("FOUND", 0))
-
-    return {
-        "version": "v1-truth-v4",
-        "default_collapsed": True,
-        "placement": "CASE_REPORT_BOTTOM",
-        "media_autoload": False,
-        "accounts": visible,
-        "sections": sections,
-        "summary": {
-            "signals_total": len(visible),
-            "found_total": found_total,
-            "direct_public_profiles": direct_public,
-            "observed_total": int(status_counts.get("OBSERVED", 0)),
-            "blocked_total": int(status_counts.get("BLOCKED", 0)),
-            "rate_limited_total": int(status_counts.get("RATE_LIMITED", 0)),
-            "unreliable_total": int(status_counts.get("UNRELIABLE", 0)),
-        },
-        "truth": {
-            "sensitive_category_is_not_identity_proof": True,
-            "same_username_is_not_same_person": True,
-            "found_requires_truth_verified_source_signal": True,
-            "direct_public_profile_requires_url": True,
-            "not_found_hidden_from_sensitive_ui": True,
-            "explicit_media_autoload": False,
-            "authenticated_sessions_used": False,
-            "captcha_bypass_used": False,
-        },
-    }
-
-
 def build_social_graph(
     *,
     emailosint: object = None,
@@ -631,7 +544,6 @@ def build_social_graph(
         for category, items in grouped.items()
     }
     status_counts = Counter(str(account.status) for account in accounts)
-    sensitive = _sensitive_intelligence(account_dicts)
 
     nodes: list[dict[str, object]] = [
         {"id": "target", "type": "TARGET", "label": "badany trop"}
@@ -683,13 +595,11 @@ def build_social_graph(
             )
 
     return {
-        "version": "v4",
-        "truth_engine": "SHERLOCK_TRUTH_ENGINE_V4",
+        "version": "v3.1",
         "accounts": account_dicts,
         "categories": grouped,
         "category_counts": category_counts,
         "status_counts": dict(sorted(status_counts.items())),
-        "sensitive_intelligence": sensitive,
         "summary": {
             "signals_total": len(accounts),
             "found_total": sum(1 for account in accounts if account.status == "FOUND"),
@@ -699,7 +609,6 @@ def build_social_graph(
             "messaging_found": category_counts.get("MESSAGING", 0),
             "developer_found": category_counts.get("DEVELOPER", 0),
             "music_found": category_counts.get("MUSIC", 0),
-            "adult_found": category_counts.get("ADULT", 0),
         },
         "graph": {
             "nodes": nodes,
@@ -708,13 +617,10 @@ def build_social_graph(
             "edge_count": len(edges),
         },
         "truth": {
-            "found_requires_truth_verified_source_signal": True,
-            "raw_provider_payload_is_account_evidence": False,
+            "found_requires_source_signal": True,
             "category_is_classification_not_identity_proof": True,
             "same_username_is_not_same_person": True,
             "direct_sources_merged": True,
             "raw_secret_values_exposed": False,
-            "sensitive_layer_default_collapsed": True,
-            "sensitive_media_autoload": False,
         },
     }

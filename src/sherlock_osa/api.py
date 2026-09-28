@@ -1,21 +1,20 @@
 from __future__ import annotations
 
+import hmac
 import json
-import logging
 import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from typing import Any, Callable
 from urllib.parse import parse_qs, urlsplit
 
-from sherlock_osa.emailosint_truth import TruthEmailOsintClient
+from sherlock_osa.emailosint import EmailOsintClient
 from sherlock_osa.errors import SherlockError
 from sherlock_osa.service import MissionService
 
 
 MISSION_PATH = re.compile(r"^/api/v1/missions/([0-9a-f-]{36})$")
 REPLAY_PATH = re.compile(r"^/api/v1/missions/([0-9a-f-]{36})/replay$")
-LOGGER = logging.getLogger("sherlock_osa.api")
 ASSETS = {
     "/": ("index.html", "text/html; charset=utf-8"),
     "/assets/styles.css": ("styles.css", "text/css; charset=utf-8"),
@@ -70,6 +69,19 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
             self.wfile.write(frame)
             self.wfile.flush()
 
+        def _authorised(self) -> bool:
+            expected = f"Bearer {service.settings.api_key}"
+            supplied = self.headers.get("Authorization", "")
+            return hmac.compare_digest(expected, supplied)
+
+        def _require_auth(self) -> None:
+            if not self._authorised():
+                raise SherlockError(
+                    "UNAUTHORIZED",
+                    "Wymagany poprawny operator Bearer token.",
+                    status=401,
+                )
+
         def _body_json(self) -> object:
             raw_length = self.headers.get("Content-Length")
             if raw_length is None:
@@ -101,7 +113,17 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
             try:
                 callback()
             except SherlockError as exc:
-                self._json(exc.status, exc.as_dict())
+                if exc.status == 401:
+                    self.send_response(exc.status)
+                    self._security_headers()
+                    self.send_header("WWW-Authenticate", 'Bearer realm="sherlock-osa"')
+                    body = json.dumps(exc.as_dict(), ensure_ascii=False).encode("utf-8")
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                else:
+                    self._json(exc.status, exc.as_dict())
             except Exception:
                 self._json(
                     500,
@@ -120,6 +142,8 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
                 return
             if path == "/api/v1/health":
                 probe = query.get("probe_engine", ["false"])[0].lower() == "true"
+                if probe:
+                    self._require_auth()
                 payload = service.health(probe_engine=probe)
                 if isinstance(payload, dict):
                     payload = dict(payload)
@@ -131,8 +155,7 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
                         "provider_key_configured": bool(
                             getattr(service.settings, "emailosint_api_key", "")
                         ),
-                        "normalizer": "EMAILOSINT_TRUTH_V4",
-                        "completed_is_found": False,
+                        "normalizer": "EMAILOSINT_PARITY_PLUS_V1",
                     }
                 self._json(200, payload)
                 return
@@ -140,6 +163,7 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
                 self._json(200, service.reference_repositories())
                 return
 
+            self._require_auth()
             if path == "/api/v1/capabilities":
                 self._json(200, service.capabilities())
                 return
@@ -172,7 +196,9 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
             path, _ = self._request_target()
 
             if path == "/api/v1/lookup/email":
-                client = TruthEmailOsintClient.from_settings(service.settings)
+                if getattr(service.settings, "emailosint_api_key", ""):
+                    self._require_auth()
+                client = EmailOsintClient.from_settings(service.settings)
                 self._json(200, client.lookup(self._body_json()))
                 return
 
@@ -183,26 +209,24 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
                 self._json(200, demo_replay(self._body_json()))
                 return
 
+            self._require_auth()
+
             if path == "/api/v1/search/stream":
                 search = getattr(service, "full_search", None)
-                streaming = callable(search)
-                if not streaming:
-                    search = getattr(service, "search", None)
                 if not callable(search):
                     raise SherlockError(
                         "SEARCH_UNAVAILABLE",
-                        "Search runtime nie jest podpięty.",
+                        "Full Search nie jest podpięty.",
                         status=503,
                     )
                 body = self._body_json()
                 self._start_sse()
                 try:
-                    result = search(body, event_sink=self._sse) if streaming else search(body)
+                    result = search(body, event_sink=self._sse)
                     self._sse("case_result", result)
                 except SherlockError as exc:
                     self._sse("error", exc.as_dict())
                 except Exception:
-                    LOGGER.exception("Full Search stream failed")
                     self._sse(
                         "error",
                         {
@@ -217,13 +241,11 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
                 return
 
             if path == "/api/v1/search":
-                search = getattr(service, "search", None)
-                if not callable(search):
-                    search = getattr(service, "full_search", None)
+                search = getattr(service, "full_search", None)
                 if not callable(search):
                     raise SherlockError(
                         "SEARCH_UNAVAILABLE",
-                        "Search runtime nie jest podpięty.",
+                        "Full Search nie jest podpięty.",
                         status=503,
                     )
                 self._json(200, search(self._body_json()))
@@ -259,11 +281,6 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
                 self._start_sse()
                 try:
                     summary = research(body, event_sink=self._sse)
-                    research_result = summary.get("research") if isinstance(summary, dict) else None
-                    if isinstance(research_result, dict):
-                        self._sse("research_result", research_result)
-                        if "query" in research_result and "detective" in research_result:
-                            self._sse("case_result", research_result)
                     self._sse(
                         "session_summary",
                         {
@@ -275,10 +292,9 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
                 except SherlockError as exc:
                     self._sse("error", exc.as_dict())
                 except Exception:
-                    LOGGER.exception("Full Research stream failed")
                     self._sse(
                         "error",
-                        {"error": {"code": "INTERNAL_ERROR", "message": "Błąd wewnętrzny Full Research."}},
+                        {"error": {"code": "INTERNAL_ERROR", "message": "Błąd wewnętrzny."}},
                     )
                 finally:
                     self.close_connection = True
