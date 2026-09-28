@@ -59,23 +59,3 @@ class handler(_BaseHandler):
         if path in {"/api/v1/search", "/api/v1/search/stream"}:
             return True
         return super()._authorised()
-
-    def _do_get(self) -> None:
-        path, _ = self._request_target()
-        if path == "/api/v1/_live-smoke":
-            result = _service.full_search({
-                "kind": "USERNAME",
-                "mode": "QUICK",
-                "query": "octocat",
-            })
-            detective = result.get("detective", {})
-            self._json(200, {
-                "ok": True,
-                "mode": result.get("mode"),
-                "query": result.get("query"),
-                "source_runs": detective.get("source_runs", []),
-                "summary": detective.get("summary", {}),
-                "social_graph_summary": result.get("social_graph", {}).get("summary", {}),
-            })
-            return
-        return super()._do_get()
