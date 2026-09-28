@@ -24,6 +24,7 @@ from sherlock_osa.source_registry import (
     HIBP_ACCOUNT,
     HOLEHE,
     MAIGRET,
+    PROFILE_PUBLIC,
     RDAP_DOMAIN,
     SOCIAL_MESH_USERNAME,
     SOURCE_DESCRIPTORS,
@@ -38,14 +39,7 @@ WORKER_PROTOCOL = "sherlock-source-worker.v2"
 
 
 class IsolatedSourceModule(ResearchModule):
-    """Run network OSINT sources in a killable subprocess.
-
-    Identifier values are sent over stdin instead of argv so they are not exposed in
-    the process list. The parent process owns the hard timeout and can kill the worker.
-    Successful normalized results are retained only in-memory for the current case so
-    the Social Graph can combine direct GitHub/GitLab/Holehe/Maigret evidence with
-    EmailOSINT and the dataset-driven Site Probe Engine.
-    """
+    """Run network OSINT sources in a killable truth-aware subprocess."""
 
     def __init__(self, descriptor: SourceDescriptor) -> None:
         self.descriptor = descriptor
@@ -84,7 +78,7 @@ class IsolatedSourceModule(ResearchModule):
         process = await asyncio.create_subprocess_exec(
             sys.executable,
             "-m",
-            "sherlock_osa.source_worker",
+            "sherlock_osa.source_worker_truth",
             self.descriptor.name,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
@@ -223,6 +217,7 @@ __all__ = [
     "HOLEHE",
     "IsolatedSourceModule",
     "MAIGRET",
+    "PROFILE_PUBLIC",
     "RDAP_DOMAIN",
     "SOCIAL_MESH_USERNAME",
     "SOURCE_DESCRIPTORS",

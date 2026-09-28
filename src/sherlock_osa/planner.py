@@ -22,11 +22,10 @@ class PlannerDecision:
 
 
 class AdaptiveSourcePlanner:
-    """Context-aware source selection without inventing data.
+    """Truth-aware source selection.
 
-    The planner uses search mode, identifier depth, source priority, dependency
-    availability and credential state. The research engine still owns all hard
-    budgets and recursion limits.
+    Planning proves only that a source is runnable. It never marks the source as
+    truthful or FOUND. Runtime adapters and canaries own presence verification.
     """
 
     _priority_ceiling = {
@@ -62,6 +61,16 @@ class AdaptiveSourcePlanner:
                 decisions.append(PlannerDecision(name, False, "SOURCE_DEPTH_BOUND", priority))
                 continue
 
+            dependency_health = getattr(descriptor, "dependency_health", None)
+            if callable(dependency_health):
+                available, _version, version_match = dependency_health()
+                if not available:
+                    decisions.append(PlannerDecision(name, False, "DEPENDENCY_UNAVAILABLE", priority))
+                    continue
+                if not version_match:
+                    decisions.append(PlannerDecision(name, False, "DEPENDENCY_VERSION_DRIFT", priority))
+                    continue
+
             requires_key = bool(getattr(descriptor, "requires_key", False))
             credential_env = getattr(descriptor, "credential_env", None)
             if requires_key and (
@@ -75,14 +84,12 @@ class AdaptiveSourcePlanner:
                 decisions.append(PlannerDecision(name, False, f"MODE_{self.mode}_PRIORITY_CEILING", priority))
                 continue
 
-            # QUICK stays intentionally focused on direct/current sources. DEEP and MAX
-            # may spend budget on archives and other historical sources.
             if self.mode == "QUICK" and bool(getattr(descriptor, "historical", False)):
                 decisions.append(PlannerDecision(name, False, "QUICK_SKIPS_HISTORICAL", priority))
                 continue
 
             runnable.append((priority, name, module))
-            decisions.append(PlannerDecision(name, True, "PLANNED", priority))
+            decisions.append(PlannerDecision(name, True, "PLANNED_RUNTIME_TRUTH_REQUIRED", priority))
 
         runnable.sort(key=lambda item: (item[0], item[1]))
         return tuple(item[2] for item in runnable), tuple(decisions)
@@ -91,5 +98,7 @@ class AdaptiveSourcePlanner:
         return {
             "mode": self.mode,
             "priority_ceiling": self._priority_ceiling[self.mode],
-            "strategy": "IDENTIFIER_KIND_DEPTH_PRIORITY_CREDENTIAL_AWARE",
+            "strategy": "IDENTIFIER_DEPTH_PRIORITY_DEPENDENCY_CREDENTIAL_TRUTH_AWARE",
+            "planning_is_truth_verification": False,
+            "runtime_truth_required": True,
         }
