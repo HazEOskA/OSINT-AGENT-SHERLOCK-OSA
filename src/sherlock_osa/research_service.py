@@ -18,6 +18,7 @@ from sherlock_osa.investigation import DetectiveInvestigator, InvestigationMode
 from sherlock_osa.phone_metadata import PhoneMetadataModule
 from sherlock_osa.planner import AdaptiveSourcePlanner
 from sherlock_osa.reporting import build_human_report
+from sherlock_osa.evidence_report import build_proof_report
 from sherlock_osa.research import (
     BoundedResearchEngine,
     EventSink,
@@ -413,6 +414,11 @@ class ResearchMissionService(MissionService):
             kind=kind,
             investigation=investigation,
         )
+        proof_report = build_proof_report(
+            query=query,
+            kind=kind,
+            investigation=investigation,
+        )
 
         result = {
             "query": {
@@ -423,6 +429,7 @@ class ResearchMissionService(MissionService):
             },
             "mode": mode.name,
             "report": report,
+            "proof_report": proof_report,
             "emailosint": emailosint,
             "emailosint_error": emailosint_error,
             "social_graph": social_graph,
