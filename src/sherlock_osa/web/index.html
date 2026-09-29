@@ -25,7 +25,7 @@
       </span>
     </a>
     <div class="status-row">
-      <a class="pill accent" href="/tools">WORLD ATLAS</a>
+      <span class="pill atlas-pill" id="atlas-status"><i></i> ATLAS SYNC</span>
       <span class="pill" id="service-status"><i></i> ŁĄCZENIE</span>
       <span class="pill accent" id="deployment-mode">MAX ENGINE</span>
     </div>
@@ -133,6 +133,48 @@
           <div class="live-feed" id="live-feed"></div>
         </section>
       </form>
+    </section>
+
+    <section class="atlas-main" id="atlas-main">
+      <div class="atlas-main-head">
+        <div>
+          <p class="eyebrow">WORLD ATLAS + AGENT ROUTER</p>
+          <h2>Jeden ekran. Cały stack.</h2>
+          <p>
+            Sherlock przegląda katalog World Atlas dla każdego tropu, wybiera pasujące narzędzia
+            i automatycznie uruchamia wszystkie kompatybilne adaptery LIVE w wybranym trybie.
+          </p>
+        </div>
+        <div class="atlas-main-state">
+          <span id="atlas-sync-label">SYNCING</span>
+          <strong id="atlas-tool-total">0</strong>
+          <small>NARZĘDZI W KATALOGU</small>
+        </div>
+      </div>
+
+      <div class="atlas-main-stats">
+        <article><span>KATEGORIE</span><strong id="atlas-category-total">0</strong></article>
+        <article><span>RUNTIME ADAPTERS</span><strong id="atlas-runtime-total">0</strong></article>
+        <article><span>PASUJĄCE DO TEGO TROPU</span><strong id="atlas-match-total">—</strong></article>
+        <article><span>GOTOWE DO URUCHOMIENIA</span><strong id="atlas-ready-total">—</strong></article>
+        <article><span>ZABLOKOWANE / KLUCZ</span><strong id="atlas-blocked-total">—</strong></article>
+      </div>
+
+      <div class="atlas-plan-head">
+        <div>
+          <span>AGENT TOOL PLAN</span>
+          <p id="atlas-plan-note">Wpisz trop i uruchom wyszukiwanie — tutaj zobaczysz plan narzędzi i execution coverage.</p>
+        </div>
+        <a href="/tools">PEŁNY KATALOG ↗</a>
+      </div>
+      <div class="atlas-plan-list" id="atlas-plan-list">
+        <div class="empty-item">Plan pojawi się po analizie tropu.</div>
+      </div>
+
+      <details class="atlas-candidates">
+        <summary>WORLD ATLAS // pasujące narzędzia katalogowe</summary>
+        <div class="atlas-candidate-list" id="atlas-candidate-list"></div>
+      </details>
     </section>
 
     <section class="signal-bar max-signal-bar" aria-label="Silnik">
