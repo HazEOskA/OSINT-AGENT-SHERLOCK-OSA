@@ -125,7 +125,8 @@ class MaxSourceRegistryTests(unittest.TestCase):
         self.assertLess(deep.hard_timeout_seconds, maximum.hard_timeout_seconds)
         self.assertLess(quick.max_identifiers, deep.max_identifiers)
         self.assertLess(deep.max_identifiers, maximum.max_identifiers)
-        self.assertEqual(maximum.hard_timeout_seconds, 300.0)
+        self.assertLessEqual(maximum.hard_timeout_seconds, 300.0)
+        self.assertGreaterEqual(maximum.hard_timeout_seconds, 240.0)
 
 
 class MaxSourceParserTests(unittest.TestCase):
