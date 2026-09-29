@@ -236,3 +236,24 @@ footer { display: flex; justify-content: space-between; gap: 20px; padding: 24px
 @media(max-width:1100px){.atlas-main-stats{grid-template-columns:repeat(3,1fr)}.atlas-plan-list,.atlas-candidate-list{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:760px){.atlas-main-head{grid-template-columns:1fr}.atlas-main-state{text-align:left}.atlas-main-stats{grid-template-columns:1fr 1fr}.atlas-plan-list,.atlas-candidate-list{grid-template-columns:1fr 1fr}.atlas-plan-head{align-items:flex-start;flex-direction:column}}
 @media(max-width:520px){.atlas-main-stats,.atlas-plan-list,.atlas-candidate-list{grid-template-columns:1fr}}
+
+
+/* MAX2 completeness engine */
+.max2-section{border-color:rgba(98,255,176,.2);background:linear-gradient(180deg,rgba(8,18,15,.72),rgba(8,12,18,.66))}
+.max2-score-row{display:grid;grid-template-columns:1.2fr repeat(4,1fr);gap:9px;margin:12px 0 16px}
+.max2-score-row article{padding:15px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.016)}
+.max2-score-row span{display:block;color:var(--muted);font-size:.56rem;font-weight:900;letter-spacing:.09em}
+.max2-score-row strong{display:inline-block;margin-top:7px;font-size:1.7rem}
+.max2-score-card{border-color:rgba(98,255,176,.24)!important;background:rgba(98,255,176,.035)!important}
+.max2-score-card strong{font-size:2.5rem;color:var(--accent)}.max2-score-card small{color:var(--muted)}
+.max2-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.max2-grid>section{padding:15px;border:1px solid var(--line);border-radius:15px;background:rgba(0,0,0,.13)}
+.max2-gap-list,.max2-next-list{display:grid;gap:7px;margin-top:10px}
+.max2-gap,.max2-next{padding:10px;border:1px solid var(--line);border-radius:10px;background:rgba(255,255,255,.012)}
+.max2-gap strong,.max2-next strong{display:block;font-size:.68rem;overflow-wrap:anywhere}
+.max2-gap p,.max2-next p{margin:4px 0 0;color:#748296;font-size:.61rem;line-height:1.45}
+.max2-gap[data-severity="HIGH"]{border-color:rgba(255,102,127,.24)}
+.max2-gap[data-severity="MEDIUM"]{border-color:rgba(255,198,107,.2)}
+.max2-next a{display:inline-block;margin-top:6px;color:#aecdff;font-size:.58rem;font-weight:900}
+@media(max-width:900px){.max2-score-row{grid-template-columns:repeat(3,1fr)}.max2-grid{grid-template-columns:1fr}}
+@media(max-width:540px){.max2-score-row{grid-template-columns:1fr 1fr}}
