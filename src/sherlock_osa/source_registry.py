@@ -390,8 +390,9 @@ SOURCE_DESCRIPTORS = (
 def registry_health() -> dict[str, object]:
     sources = [descriptor.health() for descriptor in SOURCE_DESCRIPTORS]
     return {
-        "registry_version": "v4-max2",
+        "registry_version": "v3",
         "source_count": len(sources),
+        "source_pack_version": "max2.1",
         "sources": sources,
         "all_dependencies_available": all(bool(source["available"]) for source in sources),
         "all_versions_pinned": all(bool(source["version_match"]) for source in sources),
