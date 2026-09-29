@@ -19,6 +19,7 @@ from sherlock_osa.phone_metadata import PhoneMetadataModule
 from sherlock_osa.planner import AdaptiveSourcePlanner
 from sherlock_osa.reporting import build_human_report
 from sherlock_osa.evidence_report import build_proof_report
+from sherlock_osa.world_atlas import build_world_tool_plan
 from sherlock_osa.research import (
     BoundedResearchEngine,
     EventSink,
@@ -339,6 +340,24 @@ class ResearchMissionService(MissionService):
                 ) from exc
             seeds = (ResearchIdentifier(identifier_kind, query),)
 
+        sources = self.research_sources()
+        world_tool_plan = build_world_tool_plan(
+            kind=kind,
+            query=query,
+            runtime_health=sources,
+        )
+        if event_sink:
+            event_sink(
+                "atlas_plan_ready",
+                {
+                    "kind": kind,
+                    "catalog_tools_considered": world_tool_plan["catalog"]["total_tools_considered"],
+                    "matching_tools": world_tool_plan["catalog"]["matching_tools"],
+                    "runtime_ready": world_tool_plan["runtime"]["ready_adapters"],
+                    "runtime_blocked": world_tool_plan["runtime"]["blocked_adapters"],
+                },
+            )
+
         engine = self._build_search_engine(mode)
         allowed_capabilities = sorted(
             {
@@ -399,7 +418,6 @@ class ResearchMissionService(MissionService):
             },
         )
 
-        sources = self.research_sources()
         hibp = next(
             (
                 source
@@ -430,6 +448,7 @@ class ResearchMissionService(MissionService):
             "mode": mode.name,
             "report": report,
             "proof_report": proof_report,
+            "world_tool_plan": world_tool_plan,
             "emailosint": emailosint,
             "emailosint_error": emailosint_error,
             "social_graph": social_graph,
@@ -465,6 +484,8 @@ class ResearchMissionService(MissionService):
                 ),
                 "phone_metadata_source": "LIBPHONENUMBER_OFFLINE",
                 "social_mesh": "RUNTIME_PINNED_WMN_PLUS_SHERLOCK",
+                "world_atlas_considered": True,
+                "world_atlas_auto_executes_only_adapter_backed_sources": True,
                 "social_graph_direct_sources": ["HOLEHE", "MAIGRET", "GITHUB", "GITLAB", "GRAVATAR"],
                 "social_probe_post_requests": False,
                 "social_probe_authenticated_sessions": False,
