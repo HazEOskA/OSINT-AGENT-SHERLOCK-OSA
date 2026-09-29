@@ -10,6 +10,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from importlib.resources import files
 from typing import Any, Mapping
 from urllib.parse import urlsplit
@@ -1026,6 +1027,220 @@ def _hibp_lookup(account: str, kind: str, timeout_seconds: float) -> dict[str, o
     }
 
 
+def _reddit_lookup(username: str, timeout_seconds: float) -> dict[str, object]:
+    if not USERNAME_RE.fullmatch(username):
+        raise ValueError("reddit requires valid USERNAME")
+    endpoint = (
+        "https://www.reddit.com/user/"
+        + urllib.parse.quote(username, safe="")
+        + "/about.json"
+    )
+    status, payload = _http_json_response(
+        endpoint,
+        timeout_seconds,
+        headers={"User-Agent": USER_AGENT},
+        allow_status=frozenset({404}),
+    )
+    profile_url = "https://www.reddit.com/user/" + urllib.parse.quote(username, safe="")
+    if status == 404 or not isinstance(payload, Mapping):
+        return {
+            "protocol": WORKER_PROTOCOL,
+            "ok": True,
+            "fields": {"provider": "reddit", "found": False, "username": username},
+            "pivots": [],
+            "source_urls": [profile_url],
+            "confidence": 0.15,
+        }
+    data = payload.get("data")
+    if not isinstance(data, Mapping):
+        raise RuntimeError("reddit profile response missing data")
+    selected = {
+        key: _jsonable(data.get(key))
+        for key in (
+            "name", "created_utc", "link_karma", "comment_karma",
+            "total_karma", "verified", "is_employee", "subreddit",
+        )
+        if key in data
+    }
+    return {
+        "protocol": WORKER_PROTOCOL,
+        "ok": True,
+        "fields": {"provider": "reddit", "found": True, "profile": selected},
+        "pivots": [],
+        "source_urls": [profile_url],
+        "confidence": 0.94,
+    }
+
+
+def _dockerhub_lookup(username: str, timeout_seconds: float) -> dict[str, object]:
+    if not USERNAME_RE.fullmatch(username):
+        raise ValueError("dockerhub requires valid USERNAME")
+    endpoint = "https://hub.docker.com/v2/users/" + urllib.parse.quote(username, safe="") + "/"
+    status, payload = _http_json_response(
+        endpoint,
+        timeout_seconds,
+        allow_status=frozenset({404}),
+    )
+    profile_url = "https://hub.docker.com/u/" + urllib.parse.quote(username, safe="")
+    if status == 404 or not isinstance(payload, Mapping):
+        return {
+            "protocol": WORKER_PROTOCOL,
+            "ok": True,
+            "fields": {"provider": "dockerhub", "found": False, "username": username},
+            "pivots": [],
+            "source_urls": [profile_url],
+            "confidence": 0.15,
+        }
+    selected = {
+        key: _jsonable(payload.get(key))
+        for key in ("username", "full_name", "location", "company", "profile_url", "date_joined")
+        if key in payload
+    }
+    pivots = _extract_pivots(selected)
+    return {
+        "protocol": WORKER_PROTOCOL,
+        "ok": True,
+        "fields": {"provider": "dockerhub", "found": True, "profile": selected},
+        "pivots": pivots,
+        "source_urls": [profile_url],
+        "confidence": 0.94,
+    }
+
+
+def _keybase_lookup(username: str, timeout_seconds: float) -> dict[str, object]:
+    if not USERNAME_RE.fullmatch(username):
+        raise ValueError("keybase requires valid USERNAME")
+    query = urllib.parse.urlencode({"username": username})
+    endpoint = "https://keybase.io/_/api/1.0/user/lookup.json?" + query
+    status, payload = _http_json_response(
+        endpoint,
+        timeout_seconds,
+        allow_status=frozenset({404}),
+    )
+    profile_url = "https://keybase.io/" + urllib.parse.quote(username, safe="")
+    if status == 404 or not isinstance(payload, Mapping):
+        return {
+            "protocol": WORKER_PROTOCOL,
+            "ok": True,
+            "fields": {"provider": "keybase", "found": False, "username": username},
+            "pivots": [],
+            "source_urls": [profile_url],
+            "confidence": 0.15,
+        }
+    them = payload.get("them")
+    if isinstance(them, list):
+        them = them[0] if them else None
+    if not isinstance(them, Mapping):
+        return {
+            "protocol": WORKER_PROTOCOL,
+            "ok": True,
+            "fields": {"provider": "keybase", "found": False, "username": username},
+            "pivots": [],
+            "source_urls": [profile_url],
+            "confidence": 0.2,
+        }
+    basics = them.get("basics") if isinstance(them.get("basics"), Mapping) else {}
+    profile = them.get("profile") if isinstance(them.get("profile"), Mapping) else {}
+    proofs = them.get("proofs_summary") if isinstance(them.get("proofs_summary"), Mapping) else {}
+    selected = {
+        "basics": _jsonable(basics),
+        "profile": _jsonable(profile),
+        "proofs_summary": _jsonable(proofs),
+    }
+    pivots = _extract_pivots(selected)
+    return {
+        "protocol": WORKER_PROTOCOL,
+        "ok": True,
+        "fields": {"provider": "keybase", "found": True, "profile": selected},
+        "pivots": pivots,
+        "source_urls": [profile_url],
+        "confidence": 0.96,
+    }
+
+
+def _hackernews_lookup(username: str, timeout_seconds: float) -> dict[str, object]:
+    if not USERNAME_RE.fullmatch(username):
+        raise ValueError("hackernews requires valid USERNAME")
+    endpoint = (
+        "https://hacker-news.firebaseio.com/v0/user/"
+        + urllib.parse.quote(username, safe="")
+        + ".json"
+    )
+    status, payload = _http_json_response(
+        endpoint,
+        timeout_seconds,
+        allow_status=frozenset({404}),
+    )
+    profile_url = "https://news.ycombinator.com/user?id=" + urllib.parse.quote(username, safe="")
+    if status == 404 or payload is None:
+        return {
+            "protocol": WORKER_PROTOCOL,
+            "ok": True,
+            "fields": {"provider": "hackernews", "found": False, "username": username},
+            "pivots": [],
+            "source_urls": [profile_url],
+            "confidence": 0.15,
+        }
+    if not isinstance(payload, Mapping):
+        raise RuntimeError("hackernews user response must be an object")
+    selected = {
+        key: _jsonable(payload.get(key))
+        for key in ("id", "created", "karma", "about", "submitted")
+        if key in payload
+    }
+    return {
+        "protocol": WORKER_PROTOCOL,
+        "ok": True,
+        "fields": {"provider": "hackernews", "found": True, "profile": selected},
+        "pivots": [],
+        "source_urls": [profile_url],
+        "confidence": 0.93,
+    }
+
+
+def _dns_google_lookup(domain: str, timeout_seconds: float) -> dict[str, object]:
+    target = _valid_domain(domain)
+    if target is None:
+        raise ValueError("dns.google requires valid DOMAIN")
+
+    def lookup(record_type: str) -> tuple[str, object]:
+        query = urllib.parse.urlencode({"name": target, "type": record_type})
+        endpoint = "https://dns.google/resolve?" + query
+        return record_type, _http_json(endpoint, min(timeout_seconds, 10.0))
+
+    record_types = ("A", "AAAA", "MX", "NS", "TXT")
+    records: dict[str, object] = {}
+    with ThreadPoolExecutor(max_workers=len(record_types)) as executor:
+        futures = [executor.submit(lookup, record_type) for record_type in record_types]
+        for future in futures:
+            record_type, payload = future.result()
+            if isinstance(payload, Mapping):
+                answers = payload.get("Answer")
+                records[record_type] = _jsonable(answers if isinstance(answers, list) else [])
+            else:
+                records[record_type] = []
+
+    answer_count = sum(
+        len(value) for value in records.values() if isinstance(value, list)
+    )
+    return {
+        "protocol": WORKER_PROTOCOL,
+        "ok": True,
+        "fields": {
+            "provider": "dns.google",
+            "domain": target,
+            "record_types": list(record_types),
+            "answer_count": answer_count,
+            "records": records,
+        },
+        "pivots": [],
+        "source_urls": [
+            "https://dns.google/query?name=" + urllib.parse.quote(target, safe="")
+        ],
+        "confidence": 0.96 if answer_count else 0.4,
+    }
+
+
 def _emit(payload: Mapping[str, object]) -> None:
     sys.stdout.write(json.dumps(payload, ensure_ascii=False, separators=(",", ":")))
     sys.stdout.flush()
@@ -1059,6 +1274,26 @@ def main() -> int:
             if kind != "USERNAME":
                 raise ValueError("gitlab requires USERNAME")
             payload = _gitlab_lookup(value, timeout)
+        elif source == "reddit.username":
+            if kind != "USERNAME":
+                raise ValueError("reddit requires USERNAME")
+            payload = _reddit_lookup(value, timeout)
+        elif source == "dockerhub.username":
+            if kind != "USERNAME":
+                raise ValueError("dockerhub requires USERNAME")
+            payload = _dockerhub_lookup(value, timeout)
+        elif source == "keybase.username":
+            if kind != "USERNAME":
+                raise ValueError("keybase requires USERNAME")
+            payload = _keybase_lookup(value, timeout)
+        elif source == "hackernews.username":
+            if kind != "USERNAME":
+                raise ValueError("hackernews requires USERNAME")
+            payload = _hackernews_lookup(value, timeout)
+        elif source == "dns.google.domain":
+            if kind != "DOMAIN":
+                raise ValueError("dns.google requires DOMAIN")
+            payload = _dns_google_lookup(value, timeout)
         elif source == "hibp.account":
             payload = _hibp_lookup(value, kind, timeout)
         elif source == "rdap.domain":
