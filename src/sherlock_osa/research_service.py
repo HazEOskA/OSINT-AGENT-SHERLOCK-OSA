@@ -20,6 +20,7 @@ from sherlock_osa.planner import AdaptiveSourcePlanner
 from sherlock_osa.reporting import build_human_report
 from sherlock_osa.evidence_report import build_proof_report
 from sherlock_osa.world_atlas import build_world_tool_plan
+from sherlock_osa.max2 import build_max2_report
 from sherlock_osa.research import (
     BoundedResearchEngine,
     EventSink,
@@ -135,13 +136,13 @@ def search_budget(mode: InvestigationMode) -> ResearchBudget:
             no_progress_rounds=2,
         )
     return ResearchBudget(
-        hard_timeout_seconds=300.0,
-        per_module_timeout_seconds=55.0,
-        max_depth=6,
-        max_identifiers=768,
-        max_evidence=3000,
-        max_module_invocations=5000,
-        max_parallel=32,
+        hard_timeout_seconds=270.0,
+        per_module_timeout_seconds=45.0,
+        max_depth=7,
+        max_identifiers=1024,
+        max_evidence=5000,
+        max_module_invocations=8000,
+        max_parallel=40,
         no_progress_rounds=3,
     )
 
@@ -219,8 +220,15 @@ class ResearchMissionService(MissionService):
                 ),
                 "default_mode": "MAX",
                 "modes": ["QUICK", "DEEP", "MAX"],
-                "presentation": "HUMAN_REPORT_WITH_SOCIAL_GRAPH_AND_SOURCE_LINKS",
+                "presentation": "HUMAN_REPORT_WITH_SOCIAL_GRAPH_SOURCE_LINKS_PROOF_REPORT_MAX2",
                 "social_mesh": "V3_RUNTIME_PINNED_DATASETS",
+                "max2": {
+                    "enabled": True,
+                    "research_deadline_seconds": 270,
+                    "platform_headroom_seconds": 30,
+                    "coverage_report": True,
+                    "gap_engine": True,
+                },
             },
         }
 
@@ -437,6 +445,11 @@ class ResearchMissionService(MissionService):
             kind=kind,
             investigation=investigation,
         )
+        max2_report = build_max2_report(
+            investigation=investigation,
+            world_tool_plan=world_tool_plan,
+            proof_report=proof_report,
+        )
 
         result = {
             "query": {
@@ -448,6 +461,7 @@ class ResearchMissionService(MissionService):
             "mode": mode.name,
             "report": report,
             "proof_report": proof_report,
+            "max2": max2_report,
             "world_tool_plan": world_tool_plan,
             "emailosint": emailosint,
             "emailosint_error": emailosint_error,
@@ -492,6 +506,8 @@ class ResearchMissionService(MissionService):
                 "social_probe_proxy_rotation": False,
                 "social_probe_captcha_bypass": False,
                 "hard_timeout_seconds": engine.budget.hard_timeout_seconds,
+                "max2_score": max2_report["score"],
+                "max2_grade": max2_report["grade"],
             },
         }
 
