@@ -703,6 +703,115 @@ function renderGraph(graph) {
   }
 }
 
+function renderAtlasOverview(overview) {
+  if (!overview) return;
+
+  $("#atlas-tool-total").textContent = String(overview.tool_count || 0);
+  $("#atlas-category-total").textContent = String(overview.category_count || 0);
+  $("#atlas-runtime-total").textContent = String(overview.runtime_adapter_count || 0);
+  $("#atlas-sync-label").textContent = "SYNCED";
+
+  const status = $("#atlas-status");
+  if (status) {
+    status.innerHTML = "<i></i> ATLAS LIVE";
+    status.classList.add("online");
+  }
+}
+
+function renderWorldToolPlan(plan) {
+  const runtime = (plan && plan.runtime) || {};
+  const catalog = (plan && plan.catalog) || {};
+  const runtimePlan = runtime.plan || [];
+  const candidates = (plan && plan.candidates) || [];
+
+  if (!plan) {
+    $("#atlas-match-total").textContent = "—";
+    $("#atlas-ready-total").textContent = "—";
+    $("#atlas-blocked-total").textContent = "—";
+    return;
+  }
+
+  $("#atlas-match-total").textContent = String(catalog.matching_tools || 0);
+  $("#atlas-ready-total").textContent = String(runtime.ready_adapters || 0);
+  $("#atlas-blocked-total").textContent = String(runtime.blocked_adapters || 0);
+  $("#atlas-plan-note").textContent =
+    "Atlas rozważył " +
+    String(catalog.total_tools_considered || 0) +
+    " narzędzi; " +
+    String(catalog.matching_tools || 0) +
+    " pasuje do tropu. Sherlock uruchamia wszystkie kompatybilne adaptery LIVE.";
+
+  const planList = $("#atlas-plan-list");
+  planList.replaceChildren();
+
+  if (!runtimePlan.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-item";
+    empty.textContent = "Brak kompatybilnych adapterów runtime dla tego typu tropu.";
+    planList.append(empty);
+  }
+
+  for (const tool of runtimePlan) {
+    const item = document.createElement("article");
+    item.className =
+      "atlas-plan-item " +
+      (tool.execution === "EXECUTE" ? "execute" : "blocked");
+
+    const name = document.createElement("strong");
+    name.textContent = tool.name || "unknown";
+
+    const meta = document.createElement("p");
+    meta.textContent =
+      (tool.family || "source") +
+      " · priority " +
+      String(tool.priority || 0) +
+      (tool.historical ? " · historical" : "") +
+      (tool.requires_key ? " · key required" : "");
+
+    const state = document.createElement("b");
+    state.textContent =
+      tool.execution === "EXECUTE"
+        ? "WILL EXECUTE"
+        : "AUTH / DEPENDENCY REQUIRED";
+
+    item.append(name, meta, state);
+    planList.append(item);
+  }
+
+  const candidateList = $("#atlas-candidate-list");
+  candidateList.replaceChildren();
+
+  for (const tool of candidates.slice(0, 80)) {
+    const item = document.createElement("article");
+    item.className =
+      "atlas-candidate" +
+      (tool.execution_class === "CATALOG_ONLY_RESTRICTED" ? " restricted" : "");
+
+    const name = document.createElement("strong");
+    name.textContent = tool.name || "tool";
+
+    const meta = document.createElement("p");
+    meta.textContent =
+      (tool.source || "catalog") +
+      " · " +
+      (tool.category || "Uncategorized") +
+      " · score " +
+      String(tool.match_score || 0);
+
+    const open = document.createElement("a");
+    open.href = tool.url;
+    open.target = "_blank";
+    open.rel = "noreferrer noopener";
+    open.textContent =
+      tool.execution_class === "CATALOG_ONLY_RESTRICTED"
+        ? "CATALOG ONLY ↗"
+        : "OPEN TOOL ↗";
+
+    item.append(name, meta, open);
+    candidateList.append(item);
+  }
+}
+
 function renderProofReport(report) {
   const section = $("#proof-report-section");
   const claims = (report && report.claims) || [];
@@ -945,6 +1054,7 @@ function renderResult(bundle) {
   renderIdentity(detective.identity_clusters || [], findings);
   renderTimeline(detective.timeline || []);
   renderSourceRuns(detective.source_runs || []);
+  renderWorldToolPlan(bundle.world_tool_plan || null);
   renderProofReport(bundle.proof_report || null);
   renderWarnings(bundle);
 
@@ -973,6 +1083,17 @@ function liveEventMessage(event, payload) {
 
   if (event === "search_started") {
     return "START · " + String(payload.kind || "") + " · " + String(payload.mode || "");
+  }
+  if (event === "atlas_plan_ready") {
+    return (
+      "WORLD ATLAS · " +
+      String(payload.catalog_tools_considered || 0) +
+      " tools · " +
+      String(payload.matching_tools || 0) +
+      " matches · " +
+      String(payload.runtime_ready || 0) +
+      " live adapters"
+    );
   }
   if (event === "investigation_started") {
     return "Detective Core uruchomiony · tryb " + String(payload.mode || "");
@@ -1077,6 +1198,10 @@ async function runSearch(event) {
   feed.replaceChildren();
   liveBox.hidden = false;
   $("#live-status").textContent = "START";
+  $("#atlas-match-total").textContent = "…";
+  $("#atlas-ready-total").textContent = "…";
+  $("#atlas-blocked-total").textContent = "…";
+  $("#atlas-plan-note").textContent = "Agent buduje World Tool Plan dla tego tropu…";
 
   button.disabled = true;
   button.textContent = "SHERLOCK PRACUJE…";
@@ -1130,6 +1255,18 @@ async function bootstrap() {
     setOperatorAuthState(true);
   } else {
     setOperatorAuthState(false);
+  }
+
+  try {
+    const atlas = await requestJson("/api/v1/world-atlas", {});
+    renderAtlasOverview(atlas);
+  } catch (error) {
+    $("#atlas-sync-label").textContent = "DEGRADED";
+    const status = $("#atlas-status");
+    if (status) {
+      status.innerHTML = "<i></i> ATLAS DEGRADED";
+      status.classList.add("offline");
+    }
   }
 
   try {
