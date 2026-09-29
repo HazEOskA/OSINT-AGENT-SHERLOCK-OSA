@@ -812,6 +812,97 @@ function renderWorldToolPlan(plan) {
   }
 }
 
+function renderMax2(report) {
+  const section = $("#max2-section");
+  if (!section) return;
+  if (!report) {
+    section.hidden = true;
+    return;
+  }
+  section.hidden = false;
+
+  const coverage = report.coverage || {};
+  $("#max2-score").textContent = String(report.score || 0);
+  $("#max2-grade").textContent = "GRADE " + String(report.grade || "—");
+  $("#max2-atlas").textContent = String(coverage.atlas_tools_considered || 0);
+  $("#max2-executed").textContent =
+    String(coverage.runtime_executed || 0) + "/" + String(coverage.runtime_ready || 0);
+  $("#max2-links").textContent =
+    String(coverage.claims_with_direct_links || 0) + "/" + String(coverage.claims || 0);
+  $("#max2-gaps").textContent = String(report.gap_count || 0);
+
+  const gapList = $("#max2-gap-list");
+  gapList.replaceChildren();
+  const gaps = report.gaps || [];
+  if (!gaps.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-item";
+    empty.textContent = "Brak wykrytych luk w aktualnym przebiegu.";
+    gapList.append(empty);
+  } else {
+    for (const gap of gaps.slice(0, 60)) {
+      const item = document.createElement("article");
+      item.className = "max2-gap";
+      item.dataset.severity = gap.severity || "LOW";
+
+      const title = document.createElement("strong");
+      title.textContent = gap.type || "GAP";
+
+      const meta = document.createElement("p");
+      const parts = [];
+      if (gap.source) parts.push("source: " + gap.source);
+      if (gap.kind) parts.push("kind: " + gap.kind);
+      if (gap.value) parts.push("value: " + gap.value);
+      if (gap.stop_reason) parts.push("stop: " + gap.stop_reason);
+      if (gap.requires_key) parts.push("key required");
+      meta.textContent = parts.join(" · ") || "Wymaga dalszego potwierdzenia.";
+
+      item.append(title, meta);
+      gapList.append(item);
+    }
+  }
+
+  const nextList = $("#max2-next-list");
+  nextList.replaceChildren();
+  const next = report.next_best_sources || [];
+  if (!next.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-item";
+    empty.textContent = "Brak dodatkowych źródeł katalogowych do zaproponowania.";
+    nextList.append(empty);
+  } else {
+    for (const source of next.slice(0, 24)) {
+      const item = document.createElement("article");
+      item.className = "max2-next";
+
+      const title = document.createElement("strong");
+      title.textContent = source.name || "source";
+
+      const meta = document.createElement("p");
+      meta.textContent =
+        (source.source || "catalog") +
+        " · " +
+        (source.category || "Uncategorized") +
+        " · score " +
+        String(source.match_score || 0) +
+        " · " +
+        String(source.status || "ADAPTER_REQUIRED");
+
+      item.append(title, meta);
+
+      if (source.url) {
+        const link = document.createElement("a");
+        link.href = source.url;
+        link.target = "_blank";
+        link.rel = "noreferrer noopener";
+        link.textContent = "OPEN SOURCE ↗";
+        item.append(link);
+      }
+      nextList.append(item);
+    }
+  }
+}
+
 function renderProofReport(report) {
   const section = $("#proof-report-section");
   const claims = (report && report.claims) || [];
@@ -1055,6 +1146,7 @@ function renderResult(bundle) {
   renderTimeline(detective.timeline || []);
   renderSourceRuns(detective.source_runs || []);
   renderWorldToolPlan(bundle.world_tool_plan || null);
+  renderMax2(bundle.max2 || null);
   renderProofReport(bundle.proof_report || null);
   renderWarnings(bundle);
 
