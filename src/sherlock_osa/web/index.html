@@ -67,7 +67,7 @@
         <div class="lookup-head">
           <div>
             <span>PRIMARY INTAKE</span>
-            <strong>SHERLOCK MAX</strong>
+            <strong>SHERLOCK MAX²</strong>
           </div>
           <b id="mode-chip">MAX</b>
         </div>
@@ -89,7 +89,7 @@
           <label>
             <span class="input-label">Tryb śledztwa</span>
             <select name="mode" id="search-mode">
-              <option value="MAX" selected>MAX — wszystko w budżecie</option>
+              <option value="MAX" selected>MAX² — pełny mesh + coverage proof</option>
               <option value="DEEP">DEEP — szeroko i głęboko</option>
               <option value="QUICK">QUICK — szybki rekonesans</option>
             </select>
@@ -108,7 +108,7 @@
         </div>
 
         <button class="button primary full-search-button max-button" id="search-submit" type="submit">
-          URUCHOM SHERLOCK MAX
+          URUCHOM SHERLOCK MAX²
         </button>
 
         <details class="operator-settings" id="operator-settings">
@@ -358,6 +358,36 @@
           </p>
         </div>
         <div class="graph-list" id="graph-list"></div>
+      </section>
+
+      <section class="report-section max2-section" id="max2-section">
+        <div class="report-section-head">
+          <div><span>SHERLOCK MAX²</span><h3>Completeness & Gap Engine</h3></div>
+          <small id="max2-grade">GRADE —</small>
+        </div>
+
+        <div class="max2-score-row">
+          <article class="max2-score-card">
+            <span>COMPLETENESS SCORE</span>
+            <strong id="max2-score">0</strong>
+            <small>/ 100</small>
+          </article>
+          <article><span>ATLAS CONSIDERED</span><strong id="max2-atlas">0</strong></article>
+          <article><span>RUNTIME EXECUTED</span><strong id="max2-executed">0</strong></article>
+          <article><span>DIRECT-LINK CLAIMS</span><strong id="max2-links">0</strong></article>
+          <article><span>GAPS</span><strong id="max2-gaps">0</strong></article>
+        </div>
+
+        <div class="max2-grid">
+          <section>
+            <div class="panel-title"><span>01</span><h3>Braki / niedomknięte ścieżki</h3></div>
+            <div class="max2-gap-list" id="max2-gap-list"></div>
+          </section>
+          <section>
+            <div class="panel-title"><span>02</span><h3>Next Best Sources</h3></div>
+            <div class="max2-next-list" id="max2-next-list"></div>
+          </section>
+        </div>
       </section>
 
       <section class="report-section proof-report-section" id="proof-report-section">
