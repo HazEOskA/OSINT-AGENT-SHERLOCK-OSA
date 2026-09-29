@@ -4,6 +4,7 @@ import json
 import re
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -198,15 +199,26 @@ def _catalog() -> tuple[tuple[AtlasTool, ...], dict[str, str]]:
 
     tools: list[AtlasTool] = []
     errors: dict[str, str] = {}
-    for name, source_type, url in _SOURCES:
-        try:
-            body = _fetch_text(url)
-            if source_type == "tree":
-                tools.extend(_parse_tree(json.loads(body), name))
-            else:
-                tools.extend(_parse_markdown(body, name))
-        except Exception as exc:
-            errors[name] = f"{type(exc).__name__}: {exc}"[:300]
+
+    def load(source: tuple[str, str, str]) -> tuple[str, list[AtlasTool]]:
+        name, source_type, url = source
+        body = _fetch_text(url)
+        parsed = (
+            _parse_tree(json.loads(body), name)
+            if source_type == "tree"
+            else _parse_markdown(body, name)
+        )
+        return name, parsed
+
+    with ThreadPoolExecutor(max_workers=len(_SOURCES)) as executor:
+        futures = {executor.submit(load, source): source[0] for source in _SOURCES}
+        for future in as_completed(futures):
+            name = futures[future]
+            try:
+                _, parsed = future.result()
+                tools.extend(parsed)
+            except Exception as exc:
+                errors[name] = f"{type(exc).__name__}: {exc}"[:300]
 
     deduped = _dedupe(tools)
     if deduped:
