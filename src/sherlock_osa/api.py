@@ -11,16 +11,21 @@ from urllib.parse import parse_qs, urlsplit
 from sherlock_osa.emailosint import EmailOsintClient
 from sherlock_osa.errors import SherlockError
 from sherlock_osa.service import MissionService
+from sherlock_osa.world_atlas import atlas_overview
 
 
 MISSION_PATH = re.compile(r"^/api/v1/missions/([0-9a-f-]{36})$")
 REPLAY_PATH = re.compile(r"^/api/v1/missions/([0-9a-f-]{36})/replay$")
 ASSETS = {
     "/": ("index.html", "text/html; charset=utf-8"),
+    "/tools": ("tools.html", "text/html; charset=utf-8"),
+    "/tools/": ("tools.html", "text/html; charset=utf-8"),
     "/assets/styles.css": ("styles.css", "text/css; charset=utf-8"),
     "/assets/parity.css": ("parity.css", "text/css; charset=utf-8"),
     "/assets/app.js": ("app.js", "text/javascript; charset=utf-8"),
     "/assets/parity.js": ("parity.js", "text/javascript; charset=utf-8"),
+    "/assets/atlas.css": ("atlas.css", "text/css; charset=utf-8"),
+    "/assets/atlas.js": ("atlas.js", "text/javascript; charset=utf-8"),
 }
 
 
@@ -40,7 +45,7 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
             self.send_header(
                 "Content-Security-Policy",
                 "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
-                "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+                "connect-src 'self' https://raw.githubusercontent.com; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
             )
             self.send_header("Cache-Control", "no-store")
 
@@ -161,6 +166,9 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
                 return
             if path == "/api/v1/reference-repos":
                 self._json(200, service.reference_repositories())
+                return
+            if path == "/api/v1/world-atlas":
+                self._json(200, atlas_overview())
                 return
 
             self._require_auth()

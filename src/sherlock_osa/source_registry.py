@@ -193,6 +193,79 @@ GITLAB_USERNAME = SourceDescriptor(
     identity_capable=True,
 )
 
+REDDIT_USERNAME = SourceDescriptor(
+    name="reddit.username",
+    family="SOCIAL_IDENTITY",
+    supported_kinds=frozenset({IdentifierKind.USERNAME}),
+    required_capability="osint.username.lookup",
+    max_identifier_depth=3,
+    priority=11,
+    cost=SourceCost.FREE,
+    trust_class=SourceTrust.DIRECT,
+    rate_limit="PUBLIC_LIMITED",
+    timeout_seconds=15.0,
+    pivot_types=frozenset({IdentifierKind.URL}),
+    identity_capable=True,
+)
+
+DOCKERHUB_USERNAME = SourceDescriptor(
+    name="dockerhub.username",
+    family="CODE_IDENTITY",
+    supported_kinds=frozenset({IdentifierKind.USERNAME}),
+    required_capability="osint.username.lookup",
+    max_identifier_depth=3,
+    priority=12,
+    cost=SourceCost.FREE,
+    trust_class=SourceTrust.DIRECT,
+    rate_limit="PUBLIC_LIMITED",
+    timeout_seconds=15.0,
+    pivot_types=frozenset({IdentifierKind.URL}),
+    identity_capable=True,
+)
+
+KEYBASE_USERNAME = SourceDescriptor(
+    name="keybase.username",
+    family="IDENTITY",
+    supported_kinds=frozenset({IdentifierKind.USERNAME}),
+    required_capability="osint.username.lookup",
+    max_identifier_depth=2,
+    priority=12,
+    cost=SourceCost.FREE,
+    trust_class=SourceTrust.DIRECT,
+    rate_limit="PUBLIC_LIMITED",
+    timeout_seconds=15.0,
+    pivot_types=frozenset({IdentifierKind.URL, IdentifierKind.USERNAME}),
+    identity_capable=True,
+)
+
+HACKERNEWS_USERNAME = SourceDescriptor(
+    name="hackernews.username",
+    family="COMMUNITY_IDENTITY",
+    supported_kinds=frozenset({IdentifierKind.USERNAME}),
+    required_capability="osint.username.lookup",
+    max_identifier_depth=2,
+    priority=14,
+    cost=SourceCost.FREE,
+    trust_class=SourceTrust.DIRECT,
+    rate_limit="PUBLIC_LIMITED",
+    timeout_seconds=15.0,
+    pivot_types=frozenset({IdentifierKind.URL}),
+    identity_capable=True,
+)
+
+DNS_GOOGLE_DOMAIN = SourceDescriptor(
+    name="dns.google.domain",
+    family="DNS",
+    supported_kinds=frozenset({IdentifierKind.DOMAIN}),
+    required_capability="osint.domain.passive",
+    max_identifier_depth=3,
+    priority=9,
+    cost=SourceCost.FREE,
+    trust_class=SourceTrust.DIRECT,
+    rate_limit="PUBLIC_LIMITED",
+    timeout_seconds=15.0,
+)
+
 HIBP_ACCOUNT = SourceDescriptor(
     name="hibp.account",
     family="EXPOSURE",
@@ -297,6 +370,11 @@ SOURCE_DESCRIPTORS = (
     GRAVATAR_EMAIL,
     GITHUB_USERNAME,
     GITLAB_USERNAME,
+    REDDIT_USERNAME,
+    DOCKERHUB_USERNAME,
+    KEYBASE_USERNAME,
+    HACKERNEWS_USERNAME,
+    DNS_GOOGLE_DOMAIN,
     RDAP_DOMAIN,
     CRTSH_DOMAIN,
     SOCIAL_MESH_USERNAME,
@@ -314,6 +392,7 @@ def registry_health() -> dict[str, object]:
     return {
         "registry_version": "v3",
         "source_count": len(sources),
+        "source_pack_version": "max2.1",
         "sources": sources,
         "all_dependencies_available": all(bool(source["available"]) for source in sources),
         "all_versions_pinned": all(bool(source["version_match"]) for source in sources),

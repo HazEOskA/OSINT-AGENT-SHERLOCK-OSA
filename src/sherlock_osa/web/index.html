@@ -25,6 +25,7 @@
       </span>
     </a>
     <div class="status-row">
+      <span class="pill atlas-pill" id="atlas-status"><i></i> ATLAS SYNC</span>
       <span class="pill" id="service-status"><i></i> ŁĄCZENIE</span>
       <span class="pill accent" id="deployment-mode">MAX ENGINE</span>
     </div>
@@ -66,7 +67,7 @@
         <div class="lookup-head">
           <div>
             <span>PRIMARY INTAKE</span>
-            <strong>SHERLOCK MAX</strong>
+            <strong>SHERLOCK MAX²</strong>
           </div>
           <b id="mode-chip">MAX</b>
         </div>
@@ -88,7 +89,7 @@
           <label>
             <span class="input-label">Tryb śledztwa</span>
             <select name="mode" id="search-mode">
-              <option value="MAX" selected>MAX — wszystko w budżecie</option>
+              <option value="MAX" selected>MAX² — pełny mesh + coverage proof</option>
               <option value="DEEP">DEEP — szeroko i głęboko</option>
               <option value="QUICK">QUICK — szybki rekonesans</option>
             </select>
@@ -107,7 +108,7 @@
         </div>
 
         <button class="button primary full-search-button max-button" id="search-submit" type="submit">
-          URUCHOM SHERLOCK MAX
+          URUCHOM SHERLOCK MAX²
         </button>
 
         <details class="operator-settings" id="operator-settings">
@@ -132,6 +133,48 @@
           <div class="live-feed" id="live-feed"></div>
         </section>
       </form>
+    </section>
+
+    <section class="atlas-main" id="atlas-main">
+      <div class="atlas-main-head">
+        <div>
+          <p class="eyebrow">WORLD ATLAS + AGENT ROUTER</p>
+          <h2>Jeden ekran. Cały stack.</h2>
+          <p>
+            Sherlock przegląda katalog World Atlas dla każdego tropu, wybiera pasujące narzędzia
+            i automatycznie uruchamia wszystkie kompatybilne adaptery LIVE w wybranym trybie.
+          </p>
+        </div>
+        <div class="atlas-main-state">
+          <span id="atlas-sync-label">SYNCING</span>
+          <strong id="atlas-tool-total">0</strong>
+          <small>NARZĘDZI W KATALOGU</small>
+        </div>
+      </div>
+
+      <div class="atlas-main-stats">
+        <article><span>KATEGORIE</span><strong id="atlas-category-total">0</strong></article>
+        <article><span>RUNTIME ADAPTERS</span><strong id="atlas-runtime-total">0</strong></article>
+        <article><span>PASUJĄCE DO TEGO TROPU</span><strong id="atlas-match-total">—</strong></article>
+        <article><span>GOTOWE DO URUCHOMIENIA</span><strong id="atlas-ready-total">—</strong></article>
+        <article><span>ZABLOKOWANE / KLUCZ</span><strong id="atlas-blocked-total">—</strong></article>
+      </div>
+
+      <div class="atlas-plan-head">
+        <div>
+          <span>AGENT TOOL PLAN</span>
+          <p id="atlas-plan-note">Wpisz trop i uruchom wyszukiwanie — tutaj zobaczysz plan narzędzi i execution coverage.</p>
+        </div>
+        <a href="/tools">PEŁNY KATALOG ↗</a>
+      </div>
+      <div class="atlas-plan-list" id="atlas-plan-list">
+        <div class="empty-item">Plan pojawi się po analizie tropu.</div>
+      </div>
+
+      <details class="atlas-candidates">
+        <summary>WORLD ATLAS // pasujące narzędzia katalogowe</summary>
+        <div class="atlas-candidate-list" id="atlas-candidate-list"></div>
+      </details>
     </section>
 
     <section class="signal-bar max-signal-bar" aria-label="Silnik">
@@ -315,6 +358,64 @@
           </p>
         </div>
         <div class="graph-list" id="graph-list"></div>
+      </section>
+
+      <section class="report-section max2-section" id="max2-section">
+        <div class="report-section-head">
+          <div><span>SHERLOCK MAX²</span><h3>Completeness & Gap Engine</h3></div>
+          <small id="max2-grade">GRADE —</small>
+        </div>
+
+        <div class="max2-score-row">
+          <article class="max2-score-card">
+            <span>COMPLETENESS SCORE</span>
+            <strong id="max2-score">0</strong>
+            <small>/ 100</small>
+          </article>
+          <article><span>ATLAS CONSIDERED</span><strong id="max2-atlas">0</strong></article>
+          <article><span>RUNTIME EXECUTED</span><strong id="max2-executed">0</strong></article>
+          <article><span>DIRECT-LINK CLAIMS</span><strong id="max2-links">0</strong></article>
+          <article><span>GAPS</span><strong id="max2-gaps">0</strong></article>
+        </div>
+
+        <div class="max2-grid">
+          <section>
+            <div class="panel-title"><span>01</span><h3>Braki / niedomknięte ścieżki</h3></div>
+            <div class="max2-gap-list" id="max2-gap-list"></div>
+          </section>
+          <section>
+            <div class="panel-title"><span>02</span><h3>Next Best Sources</h3></div>
+            <div class="max2-next-list" id="max2-next-list"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="report-section proof-report-section" id="proof-report-section">
+        <div class="report-section-head">
+          <div><span>PROOF REPORT V1</span><h3>Raport dowodowy — claim po claimie</h3></div>
+          <small id="proof-report-hash">NO HASH</small>
+        </div>
+
+        <div class="proof-method">
+          <strong>CLAIM ≠ PROOF</strong>
+          <p>Każda teza poniżej pokazuje osobno: co znaleziono, jaki typ twierdzenia Sherlock dopuszcza, jakie dowody ją wspierają oraz czego z tych dowodów nie wolno wnioskować.</p>
+          <a href="/tools">WORLD OSINT ATLAS ↗</a>
+        </div>
+
+        <div class="proof-summary-grid">
+          <article><span>CLAIMS</span><strong id="proof-claim-count">0</strong></article>
+          <article><span>FACTS</span><strong id="proof-fact-count">0</strong></article>
+          <article><span>CORRELATED</span><strong id="proof-correlated-count">0</strong></article>
+          <article><span>HYPOTHESES</span><strong id="proof-hypothesis-count">0</strong></article>
+          <article><span>TOOLS EXECUTED</span><strong id="proof-tools-count">0</strong></article>
+        </div>
+
+        <div class="proof-claims" id="proof-claims"></div>
+
+        <details class="tool-coverage">
+          <summary>TOOL COVERAGE // co naprawdę zostało uruchomione</summary>
+          <div class="tool-coverage-list" id="proof-tool-coverage"></div>
+        </details>
       </section>
 
       <section class="report-section warnings-section" id="warnings-section" hidden>

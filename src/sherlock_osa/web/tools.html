@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Sherlock OSA — World OSINT Atlas</title>
+<link rel="stylesheet" href="/assets/atlas.css">
+</head>
+<body>
+<header class="topbar">
+<a class="brand" href="/"><span class="mark">S//O</span><span><strong>SHERLOCK OSA</strong><small>WORLD OSINT ATLAS</small></span></a>
+<nav><a href="/">INVESTIGATE</a><a class="active" href="/tools">WORLD ATLAS</a></nav>
+<span id="sync-state">SYNCING</span>
+</header>
+<main>
+<section class="hero">
+<div>
+<p class="eyebrow">GLOBAL TOOL INTELLIGENCE // LIVE CATALOG</p>
+<h1>Każdy trop.<br><em>Każde narzędzie.</em></h1>
+<p class="lead">Dynamiczny atlas agregujący OSINT Framework, Awesome OSINT, Awesome Threat Intelligence i natywne źródła Sherlocka. URL-e są deduplikowane. Katalog nie uruchamia automatycznie narzędzi ofensywnych.</p>
+</div>
+<div class="stats">
+<article><span>UNIQUE RESOURCES</span><strong id="stat-total">0</strong></article>
+<article><span>CATEGORIES</span><strong id="stat-categories">0</strong></article>
+<article><span>LIVE SOURCES</span><strong id="stat-sources">0</strong></article>
+<article><span>SHERLOCK EXECUTABLE</span><strong id="stat-runtime">0</strong></article>
+</div>
+</section>
+<section id="source-strip" class="source-strip"></section>
+<section class="controls">
+<label class="search"><span>SEARCH EVERYTHING</span><input id="q" autocomplete="off" placeholder="username, geolocation, breach, satellite, blockchain, metadata…"></label>
+<label><span>SOURCE</span><select id="source-filter"><option value="">ALL SOURCES</option></select></label>
+<label><span>CATEGORY</span><select id="category-filter"><option value="">ALL CATEGORIES</option></select></label>
+<label><span>MODE</span><select id="mode-filter"><option value="">ALL</option><option value="runtime">SHERLOCK EXECUTABLE</option><option value="api">API</option><option value="local">LOCAL INSTALL</option><option value="passive">PASSIVE</option><option value="active">ACTIVE</option><option value="catalog">CATALOG ONLY</option></select></label>
+<button id="refresh" type="button">↻ RESYNC</button>
+</section>
+<section class="meta">
+<div class="section-head"><div><p class="eyebrow">SOURCE DIRECTORIES</p><h2>Światowe indeksy</h2></div><span>EXTENSIBLE REGISTRY</span></div>
+<div id="meta-grid" class="meta-grid"></div>
+</section>
+<section class="catalog">
+<div class="section-head"><div><p class="eyebrow">DEDUPED TOOL GRAPH</p><h2 id="result-title">Wszystkie zasoby</h2></div><span id="visible-count">0 MATCHES</span></div>
+<div id="category-chips" class="chips"></div>
+<div id="tool-grid" class="tool-grid"></div>
+<button id="load-more" class="load-more" type="button" hidden>LOAD MORE</button>
+</section>
+</main>
+<footer><span>SHERLOCK OSA // WORLD ATLAS</span><span>CATALOG ≠ EXECUTION // CLAIM ≠ PROOF</span></footer>
+<script src="/assets/atlas.js" defer></script>
+</body>
+</html>

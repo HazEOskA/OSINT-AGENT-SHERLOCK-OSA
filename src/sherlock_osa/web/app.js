@@ -703,6 +703,386 @@ function renderGraph(graph) {
   }
 }
 
+function renderAtlasOverview(overview) {
+  if (!overview) return;
+
+  $("#atlas-tool-total").textContent = String(overview.tool_count || 0);
+  $("#atlas-category-total").textContent = String(overview.category_count || 0);
+  $("#atlas-runtime-total").textContent = String(overview.runtime_adapter_count || 0);
+  $("#atlas-sync-label").textContent = "SYNCED";
+
+  const status = $("#atlas-status");
+  if (status) {
+    status.innerHTML = "<i></i> ATLAS LIVE";
+    status.classList.add("online");
+  }
+}
+
+function renderWorldToolPlan(plan) {
+  const runtime = (plan && plan.runtime) || {};
+  const catalog = (plan && plan.catalog) || {};
+  const runtimePlan = runtime.plan || [];
+  const candidates = (plan && plan.candidates) || [];
+
+  if (!plan) {
+    $("#atlas-match-total").textContent = "—";
+    $("#atlas-ready-total").textContent = "—";
+    $("#atlas-blocked-total").textContent = "—";
+    return;
+  }
+
+  $("#atlas-match-total").textContent = String(catalog.matching_tools || 0);
+  $("#atlas-ready-total").textContent = String(runtime.ready_adapters || 0);
+  $("#atlas-blocked-total").textContent = String(runtime.blocked_adapters || 0);
+  $("#atlas-plan-note").textContent =
+    "Atlas rozważył " +
+    String(catalog.total_tools_considered || 0) +
+    " narzędzi; " +
+    String(catalog.matching_tools || 0) +
+    " pasuje do tropu. Sherlock uruchamia wszystkie kompatybilne adaptery LIVE.";
+
+  const planList = $("#atlas-plan-list");
+  planList.replaceChildren();
+
+  if (!runtimePlan.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-item";
+    empty.textContent = "Brak kompatybilnych adapterów runtime dla tego typu tropu.";
+    planList.append(empty);
+  }
+
+  for (const tool of runtimePlan) {
+    const item = document.createElement("article");
+    item.className =
+      "atlas-plan-item " +
+      (tool.execution === "EXECUTE" ? "execute" : "blocked");
+
+    const name = document.createElement("strong");
+    name.textContent = tool.name || "unknown";
+
+    const meta = document.createElement("p");
+    meta.textContent =
+      (tool.family || "source") +
+      " · priority " +
+      String(tool.priority || 0) +
+      (tool.historical ? " · historical" : "") +
+      (tool.requires_key ? " · key required" : "");
+
+    const state = document.createElement("b");
+    state.textContent =
+      tool.execution === "EXECUTE"
+        ? "WILL EXECUTE"
+        : "AUTH / DEPENDENCY REQUIRED";
+
+    item.append(name, meta, state);
+    planList.append(item);
+  }
+
+  const candidateList = $("#atlas-candidate-list");
+  candidateList.replaceChildren();
+
+  for (const tool of candidates.slice(0, 80)) {
+    const item = document.createElement("article");
+    item.className =
+      "atlas-candidate" +
+      (tool.execution_class === "CATALOG_ONLY_RESTRICTED" ? " restricted" : "");
+
+    const name = document.createElement("strong");
+    name.textContent = tool.name || "tool";
+
+    const meta = document.createElement("p");
+    meta.textContent =
+      (tool.source || "catalog") +
+      " · " +
+      (tool.category || "Uncategorized") +
+      " · score " +
+      String(tool.match_score || 0);
+
+    const open = document.createElement("a");
+    open.href = tool.url;
+    open.target = "_blank";
+    open.rel = "noreferrer noopener";
+    open.textContent =
+      tool.execution_class === "CATALOG_ONLY_RESTRICTED"
+        ? "CATALOG ONLY ↗"
+        : "OPEN TOOL ↗";
+
+    item.append(name, meta, open);
+    candidateList.append(item);
+  }
+}
+
+function renderMax2(report) {
+  const section = $("#max2-section");
+  if (!section) return;
+  if (!report) {
+    section.hidden = true;
+    return;
+  }
+  section.hidden = false;
+
+  const coverage = report.coverage || {};
+  $("#max2-score").textContent = String(report.score || 0);
+  $("#max2-grade").textContent = "GRADE " + String(report.grade || "—");
+  $("#max2-atlas").textContent = String(coverage.atlas_tools_considered || 0);
+  $("#max2-executed").textContent =
+    String(coverage.runtime_executed || 0) + "/" + String(coverage.runtime_ready || 0);
+  $("#max2-links").textContent =
+    String(coverage.claims_with_direct_links || 0) + "/" + String(coverage.claims || 0);
+  $("#max2-gaps").textContent = String(report.gap_count || 0);
+
+  const gapList = $("#max2-gap-list");
+  gapList.replaceChildren();
+  const gaps = report.gaps || [];
+  if (!gaps.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-item";
+    empty.textContent = "Brak wykrytych luk w aktualnym przebiegu.";
+    gapList.append(empty);
+  } else {
+    for (const gap of gaps.slice(0, 60)) {
+      const item = document.createElement("article");
+      item.className = "max2-gap";
+      item.dataset.severity = gap.severity || "LOW";
+
+      const title = document.createElement("strong");
+      title.textContent = gap.type || "GAP";
+
+      const meta = document.createElement("p");
+      const parts = [];
+      if (gap.source) parts.push("source: " + gap.source);
+      if (gap.kind) parts.push("kind: " + gap.kind);
+      if (gap.value) parts.push("value: " + gap.value);
+      if (gap.stop_reason) parts.push("stop: " + gap.stop_reason);
+      if (gap.requires_key) parts.push("key required");
+      meta.textContent = parts.join(" · ") || "Wymaga dalszego potwierdzenia.";
+
+      item.append(title, meta);
+      gapList.append(item);
+    }
+  }
+
+  const nextList = $("#max2-next-list");
+  nextList.replaceChildren();
+  const next = report.next_best_sources || [];
+  if (!next.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-item";
+    empty.textContent = "Brak dodatkowych źródeł katalogowych do zaproponowania.";
+    nextList.append(empty);
+  } else {
+    for (const source of next.slice(0, 24)) {
+      const item = document.createElement("article");
+      item.className = "max2-next";
+
+      const title = document.createElement("strong");
+      title.textContent = source.name || "source";
+
+      const meta = document.createElement("p");
+      meta.textContent =
+        (source.source || "catalog") +
+        " · " +
+        (source.category || "Uncategorized") +
+        " · score " +
+        String(source.match_score || 0) +
+        " · " +
+        String(source.status || "ADAPTER_REQUIRED");
+
+      item.append(title, meta);
+
+      if (source.url) {
+        const link = document.createElement("a");
+        link.href = source.url;
+        link.target = "_blank";
+        link.rel = "noreferrer noopener";
+        link.textContent = "OPEN SOURCE ↗";
+        item.append(link);
+      }
+      nextList.append(item);
+    }
+  }
+}
+
+function renderProofReport(report) {
+  const section = $("#proof-report-section");
+  const claims = (report && report.claims) || [];
+  const summary = (report && report.summary) || {};
+  const integrity = (report && report.integrity) || {};
+  const coverage = (report && report.tool_coverage) || [];
+
+  if (!report) {
+    section.hidden = true;
+    return;
+  }
+
+  section.hidden = false;
+  $("#proof-report-hash").textContent =
+    integrity.proof_report_sha256
+      ? "SHA256 " + String(integrity.proof_report_sha256).slice(0, 16) + "…"
+      : "NO HASH";
+  $("#proof-claim-count").textContent = String(summary.claims || claims.length || 0);
+  $("#proof-fact-count").textContent = String(summary.facts || 0);
+  $("#proof-correlated-count").textContent = String(summary.correlated || 0);
+  $("#proof-hypothesis-count").textContent = String(summary.hypotheses || 0);
+  $("#proof-tools-count").textContent = String(summary.tools_executed || 0);
+
+  const container = $("#proof-claims");
+  container.replaceChildren();
+
+  if (!claims.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-item";
+    empty.textContent = "Brak claimów z materiałem dowodowym.";
+    container.append(empty);
+  }
+
+  for (const claim of claims.slice(0, 220)) {
+    const card = document.createElement("article");
+    card.className = "proof-card";
+    card.dataset.assertion = claim.assertion || "HYPOTHESIS";
+
+    const head = document.createElement("div");
+    head.className = "proof-card-head";
+
+    const titleWrap = document.createElement("div");
+    const kind = document.createElement("small");
+    kind.textContent =
+      String(claim.kind || "CLAIM") +
+      " · " +
+      String(claim.status || "UNKNOWN") +
+      " · " +
+      String(claim.evidence_strength || "LEAD_ONLY");
+    const title = document.createElement("h4");
+    title.textContent = claim.title || claim.value || "Claim";
+    titleWrap.append(kind, title);
+
+    const assertion = document.createElement("b");
+    assertion.className =
+      "proof-assertion " + String(claim.assertion || "HYPOTHESIS").toLowerCase();
+    assertion.textContent = claim.assertion || "HYPOTHESIS";
+    head.append(titleWrap, assertion);
+
+    const value = document.createElement("p");
+    value.className = "proof-value";
+    value.textContent = claim.value || "";
+
+    const explanation = document.createElement("p");
+    explanation.className = "proof-explanation";
+    explanation.textContent = claim.explanation || "";
+
+    const meta = document.createElement("p");
+    meta.className = "proof-meta";
+    meta.textContent =
+      "Niezależne rodziny źródeł: " +
+      String(claim.independent_source_count || 0) +
+      " · evidence records: " +
+      String(claim.evidence_count || 0) +
+      " · confidence: " +
+      String(Math.round(Number(claim.confidence || 0) * 100)) +
+      "% · claim SHA256: " +
+      String(claim.claim_sha256 || "").slice(0, 20) +
+      "…";
+
+    const boundary = document.createElement("div");
+    boundary.className = "proof-boundary";
+
+    const supports = document.createElement("div");
+    supports.className = "supports";
+    const supportsTitle = document.createElement("b");
+    supportsTitle.textContent = "CO TEN MATERIAŁ WSPIERA";
+    const supportsText = document.createElement("p");
+    supportsText.textContent = claim.supports || "";
+    supports.append(supportsTitle, supportsText);
+
+    const limits = document.createElement("div");
+    limits.className = "limits";
+    const limitsTitle = document.createElement("b");
+    limitsTitle.textContent = "CZEGO NIE DOWODZI";
+    const limitsText = document.createElement("p");
+    limitsText.textContent = claim.does_not_establish || "";
+    limits.append(limitsTitle, limitsText);
+
+    boundary.append(supports, limits);
+    card.append(head, value, explanation, meta, boundary);
+
+    const evidenceList = document.createElement("div");
+    evidenceList.className = "proof-evidence-list";
+
+    for (const evidence of (claim.evidence || []).slice(0, 40)) {
+      const item = document.createElement("article");
+      item.className = "proof-evidence";
+
+      const source = document.createElement("div");
+      const sourceName = document.createElement("strong");
+      sourceName.textContent = evidence.source || "source";
+      const sourceMeta = document.createElement("p");
+      sourceMeta.textContent =
+        (evidence.source_family || "source") +
+        " · confidence " +
+        String(Math.round(Number(evidence.confidence || 0) * 100)) +
+        "%";
+      source.append(sourceName, sourceMeta);
+
+      const meaning = document.createElement("div");
+      const what = document.createElement("strong");
+      what.textContent = evidence.what_is_this || "Źródło dowodowe";
+      const when = document.createElement("p");
+      when.textContent =
+        (evidence.collected_at ? "zebrano: " + evidence.collected_at : "") +
+        (evidence.evidence_id ? " · evidence_id: " + evidence.evidence_id : "");
+      const hash = document.createElement("code");
+      hash.textContent = "sha256: " + String(evidence.evidence_sha256 || "");
+      meaning.append(what, when, hash);
+
+      item.append(source, meaning);
+
+      if (evidence.url) {
+        const link = document.createElement("a");
+        link.href = evidence.url;
+        link.target = "_blank";
+        link.rel = "noreferrer noopener";
+        link.textContent = "DOWÓD ↗";
+        item.append(link);
+      } else {
+        const noLink = document.createElement("span");
+        noLink.className = "no-hard-link";
+        noLink.textContent = "NO DIRECT URL";
+        item.append(noLink);
+      }
+
+      evidenceList.append(item);
+    }
+
+    card.append(evidenceList);
+    container.append(card);
+  }
+
+  const toolList = $("#proof-tool-coverage");
+  toolList.replaceChildren();
+  for (const tool of coverage) {
+    const item = document.createElement("article");
+    item.className =
+      "tool-run " +
+      (tool.execution === "EXECUTED" ? "executed" : "not-executed");
+
+    const name = document.createElement("strong");
+    name.textContent = tool.tool || "unknown";
+    const meta = document.createElement("p");
+    meta.textContent =
+      (tool.source_family || "source") +
+      " · evidence " +
+      String(tool.evidence_count || 0) +
+      (tool.duration_ms ? " · " + String(tool.duration_ms) + " ms" : "") +
+      (tool.reason ? " · " + tool.reason : "");
+    const status = document.createElement("b");
+    status.textContent =
+      String(tool.status || "UNKNOWN") + " / " + String(tool.execution || "NOT_EXECUTED");
+
+    item.append(name, meta, status);
+    toolList.append(item);
+  }
+}
+
 function renderWarnings(bundle) {
   const warnings = [];
 
@@ -765,6 +1145,9 @@ function renderResult(bundle) {
   renderIdentity(detective.identity_clusters || [], findings);
   renderTimeline(detective.timeline || []);
   renderSourceRuns(detective.source_runs || []);
+  renderWorldToolPlan(bundle.world_tool_plan || null);
+  renderMax2(bundle.max2 || null);
+  renderProofReport(bundle.proof_report || null);
   renderWarnings(bundle);
 
   const graph = detective.graph || {};
@@ -792,6 +1175,17 @@ function liveEventMessage(event, payload) {
 
   if (event === "search_started") {
     return "START · " + String(payload.kind || "") + " · " + String(payload.mode || "");
+  }
+  if (event === "atlas_plan_ready") {
+    return (
+      "WORLD ATLAS · " +
+      String(payload.catalog_tools_considered || 0) +
+      " tools · " +
+      String(payload.matching_tools || 0) +
+      " matches · " +
+      String(payload.runtime_ready || 0) +
+      " live adapters"
+    );
   }
   if (event === "investigation_started") {
     return "Detective Core uruchomiony · tryb " + String(payload.mode || "");
@@ -896,6 +1290,10 @@ async function runSearch(event) {
   feed.replaceChildren();
   liveBox.hidden = false;
   $("#live-status").textContent = "START";
+  $("#atlas-match-total").textContent = "…";
+  $("#atlas-ready-total").textContent = "…";
+  $("#atlas-blocked-total").textContent = "…";
+  $("#atlas-plan-note").textContent = "Agent buduje World Tool Plan dla tego tropu…";
 
   button.disabled = true;
   button.textContent = "SHERLOCK PRACUJE…";
@@ -949,6 +1347,18 @@ async function bootstrap() {
     setOperatorAuthState(true);
   } else {
     setOperatorAuthState(false);
+  }
+
+  try {
+    const atlas = await requestJson("/api/v1/world-atlas", {});
+    renderAtlasOverview(atlas);
+  } catch (error) {
+    $("#atlas-sync-label").textContent = "DEGRADED";
+    const status = $("#atlas-status");
+    if (status) {
+      status.innerHTML = "<i></i> ATLAS DEGRADED";
+      status.classList.add("offline");
+    }
   }
 
   try {
