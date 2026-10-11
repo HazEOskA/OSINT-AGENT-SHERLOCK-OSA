@@ -1114,6 +1114,52 @@ function renderWarnings(bundle) {
   renderDataList("#warnings-list", unique, "");
 }
 
+function humanRecords(findings) {
+  const all = [];
+  for (const f of findings || []) {
+    const sources = [];
+    const seen = new Set();
+    for (const s of f.sources || []) {
+      let url;
+      try { url = new URL(String(s.url || "")); } catch { continue; }
+      if (!["https:", "http:"].includes(url.protocol) || seen.has(url.href)) continue;
+      seen.add(url.href);
+      sources.push({url:url.href,name:String(s.source || "Źródło publiczne")});
+    }
+    if (sources.length) all.push({
+      title:String(f.title || f.value || "Ustalenie"),
+      status:String(f.status || "UNVERIFIED").toUpperCase(),
+      kind:String(f.kind || "Ustalenie"),
+      description:findingExplanation(f),
+      sources
+    });
+  }
+  return all.sort((a,b)=>statusRank(a.status)-statusRank(b.status));
+}
+function renderHumanReport(bundle) {
+  const items = humanRecords(((bundle.detective || {}).findings || []));
+  const confirmed = items.filter(x=>x.status === "CONFIRMED").length;
+  const stats = $("#human-stats"), list = $("#human-list");
+  stats.replaceChildren(); list.replaceChildren();
+  $("#human-intro").textContent = confirmed ?
+    "Znaleziono " + confirmed + " potwierdzonych ustaleń z linkami do źródeł." :
+    "Brak potwierdzonych ustaleń z bezpośrednimi linkami. Pozostałe wyniki wymagają weryfikacji.";
+  for (const [n,label] of [[confirmed,"Potwierdzone"],[items.length-confirmed,"Do sprawdzenia"],[items.reduce((sum,x)=>sum+x.sources.length,0),"Linki"]]) {
+    const el=document.createElement("div"), strong=document.createElement("strong"), small=document.createElement("span");
+    strong.textContent=String(n); small.textContent=label; el.append(strong,small); stats.append(el);
+  }
+  if (!items.length) { const p=document.createElement("p"); p.textContent="Brak wyników z linkami. Pełna dokumentacja jest dostępna poniżej."; list.append(p); }
+  for (const item of items) {
+    const card=document.createElement("article"); card.className="human-card";
+    const status=document.createElement("span"); status.className="human-status"; status.dataset.status=item.status; status.textContent=statusLabel(item.status);
+    const title=document.createElement("h4"); title.textContent=item.title;
+    const description=document.createElement("p"); description.textContent=item.description;
+    const method=document.createElement("p"); method.className="human-method"; method.textContent="Jak znaleziono: Sherlock OSA · publiczne źródła · "+item.kind;
+    const links=document.createElement("div"); links.className="human-links";
+    for (const src of item.sources) { const a=document.createElement("a"); a.href=src.url; a.target="_blank"; a.rel="noopener noreferrer"; a.textContent="↗ "+src.name; a.title=src.url; links.append(a); }
+    card.append(status,title,description,method,links); list.append(card);
+  }
+}
 function renderResult(bundle) {
   const detective = bundle.detective || {};
   const summary = detective.summary || {};
@@ -1142,6 +1188,7 @@ function renderResult(bundle) {
 
   renderEmailOsint(bundle.emailosint || null, bundle.emailosint_error || null);
   renderFindings(findings);
+  renderHumanReport(bundle);
   renderIdentity(detective.identity_clusters || [], findings);
   renderTimeline(detective.timeline || []);
   renderSourceRuns(detective.source_runs || []);
