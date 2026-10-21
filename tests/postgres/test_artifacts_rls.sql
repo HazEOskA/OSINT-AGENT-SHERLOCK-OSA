@@ -43,7 +43,7 @@ BEGIN
  IF (SELECT count(*) FROM cf_case_evidence_spans) <> 1 THEN RAISE EXCEPTION 'OWNER_READ_WRITTEN_SPAN'; END IF;
 END $$;
 -- Cross-case INSERT/SELECT cannot happen even in same tenant.
-DO $
+DO $$
 BEGIN
  BEGIN
  INSERT INTO cf_case_artifacts(tenant_id,case_id,artifact_id,filename,version,mime_type,
@@ -53,7 +53,7 @@ BEGIN
  RAISE EXCEPTION 'CROSS_CASE_ARTIFACT_WRITE_ALLOWED';
  EXCEPTION WHEN insufficient_privilege THEN NULL;
  END;
-END $;
+END $$;
 -- Cross-tenant INSERT impossible.
 DO $$
 BEGIN
