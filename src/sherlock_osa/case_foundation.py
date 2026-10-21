@@ -90,7 +90,19 @@ CREATE TABLE IF NOT EXISTS case_files (
     purpose TEXT NOT NULL,
     created_by TEXT NOT NULL,
     created_at TEXT NOT NULL,
+    acl_revision INTEGER NOT NULL DEFAULT 1,
     PRIMARY KEY(tenant_id, case_id)
+);
+CREATE TABLE IF NOT EXISTS case_assignments (
+    tenant_id TEXT NOT NULL,
+    case_id TEXT NOT NULL,
+    actor_id TEXT NOT NULL,
+    case_role TEXT NOT NULL CHECK(case_role IN ('OWNER','INVESTIGATOR','REVIEWER','VIEWER')),
+    granted_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY(tenant_id, case_id, actor_id),
+    FOREIGN KEY(tenant_id, case_id) REFERENCES case_files(tenant_id, case_id),
+    FOREIGN KEY(tenant_id, actor_id) REFERENCES case_memberships(tenant_id, actor_id)
 );
 CREATE TABLE IF NOT EXISTS case_scopes (
     tenant_id TEXT NOT NULL,
@@ -145,6 +157,7 @@ CREATE TABLE IF NOT EXISTS case_audit (
     event_hash TEXT NOT NULL,
     PRIMARY KEY(tenant_id, seq)
 );
+CREATE INDEX IF NOT EXISTS idx_assignments_actor ON case_assignments(tenant_id, actor_id, case_id);
 CREATE INDEX IF NOT EXISTS idx_scopes_case ON case_scopes(tenant_id, case_id, revision);
 CREATE INDEX IF NOT EXISTS idx_approvals_plan ON case_approvals(tenant_id, case_id, plan_id);
 """
@@ -203,13 +216,19 @@ class CaseFoundation:
         if roles is not None and row["role"] not in roles:
             raise CaseGateError("ACCESS_DENIED")
 
-    def _assert_case(self, db: sqlite3.Connection, principal: CasePrincipal, case_id: str) -> sqlite3.Row:
+    def _assert_case(self, db: sqlite3.Connection, principal: CasePrincipal, case_id: str,
+                     roles: frozenset[str] | None = None) -> sqlite3.Row:
+        """A tenant member must ALSO hold an explicit grant for this exact case."""
         row = db.execute(
-            "SELECT * FROM case_files WHERE tenant_id=? AND case_id=?",
-            (principal.tenant_id, case_id),
+            "SELECT f.*, a.case_role FROM case_files AS f "
+            "JOIN case_assignments AS a ON a.tenant_id=f.tenant_id AND a.case_id=f.case_id "
+            "WHERE f.tenant_id=? AND f.case_id=? AND a.actor_id=?",
+            (principal.tenant_id, case_id, principal.actor_id),
         ).fetchone()
         if row is None:
             raise CaseGateError("CASE_NOT_FOUND")
+        if roles is not None and row["case_role"] not in roles:
+            raise CaseGateError("ACCESS_DENIED")
         return row
 
     def _latest_scope(self, db: sqlite3.Connection, principal: CasePrincipal, case_id: str) -> tuple[sqlite3.Row, dict[str, Any]]:
@@ -272,6 +291,53 @@ class CaseFoundation:
                 )
         self._write(op)
 
+    def assign_case_member(self, principal: CasePrincipal, case_id: str, *,
+                           actor_id: str, role: str) -> None:
+        """Only a tenant OWNER assigned as case OWNER can grant the existing tenant role."""
+        actor_id = _required(actor_id, "actor_id")
+        if role not in ROLES:
+            raise CaseGateError("INVALID_ROLE")
+
+        def op(db: sqlite3.Connection) -> None:
+            self._authorized(db, principal, frozenset({"OWNER"}))
+            self._assert_case(db, principal, case_id, frozenset({"OWNER"}))
+            member = db.execute(
+                "SELECT role FROM case_memberships WHERE tenant_id=? AND actor_id=?",
+                (principal.tenant_id, actor_id),
+            ).fetchone()
+            if member is None or member["role"] != role:
+                raise CaseGateError("MEMBER_ROLE_MISMATCH")
+            db.execute(
+                "INSERT INTO case_assignments(tenant_id,case_id,actor_id,case_role,granted_by,created_at) "
+                "VALUES(?,?,?,?,?,?) ON CONFLICT(tenant_id,case_id,actor_id) "
+                "DO UPDATE SET case_role=excluded.case_role, granted_by=excluded.granted_by, "
+                "created_at=excluded.created_at",
+                (principal.tenant_id, case_id, actor_id, role, principal.actor_id, self._now().isoformat()),
+            )
+            db.execute("UPDATE case_files SET acl_revision=acl_revision+1 WHERE tenant_id=? AND case_id=?",
+                       (principal.tenant_id, case_id))
+            self._audit(db, principal, case_id, "CASE_ACCESS_GRANTED", actor_id, {"role": role})
+        self._write(op)
+
+    def revoke_case_member(self, principal: CasePrincipal, case_id: str, *, actor_id: str) -> None:
+        actor_id = _required(actor_id, "actor_id")
+
+        def op(db: sqlite3.Connection) -> None:
+            self._authorized(db, principal, frozenset({"OWNER"}))
+            self._assert_case(db, principal, case_id, frozenset({"OWNER"}))
+            if actor_id == principal.actor_id:
+                raise CaseGateError("SELF_REVOKE_DENIED")
+            row = db.execute(
+                "DELETE FROM case_assignments WHERE tenant_id=? AND case_id=? AND actor_id=? RETURNING actor_id",
+                (principal.tenant_id, case_id, actor_id),
+            ).fetchone()
+            if row is None:
+                raise CaseGateError("ASSIGNMENT_NOT_FOUND")
+            db.execute("UPDATE case_files SET acl_revision=acl_revision+1 WHERE tenant_id=? AND case_id=?",
+                       (principal.tenant_id, case_id))
+            self._audit(db, principal, case_id, "CASE_ACCESS_REVOKED", actor_id, {"revoked": True})
+        self._write(op)
+
     def _make_scope(
         self,
         *,
@@ -310,8 +376,16 @@ class CaseFoundation:
 
         def op(db: sqlite3.Connection) -> None:
             self._authorized(db, principal, WRITERS)
-            db.execute("INSERT INTO case_files VALUES(?,?,?,?,?,?)",
+            db.execute("INSERT INTO case_files(tenant_id,case_id,title,purpose,created_by,created_at) "
+                       "VALUES(?,?,?,?,?,?)",
                        (principal.tenant_id, case_id, title, purpose, principal.actor_id, self._now().isoformat()))
+            creator = db.execute(
+                "SELECT role FROM case_memberships WHERE tenant_id=? AND actor_id=?",
+                (principal.tenant_id, principal.actor_id),
+            ).fetchone()
+            db.execute("INSERT INTO case_assignments VALUES(?,?,?,?,?,?)",
+                       (principal.tenant_id, case_id, principal.actor_id, creator["role"],
+                        principal.actor_id, self._now().isoformat()))
             db.execute("INSERT INTO case_scopes VALUES(?,?,?,?,?,?,?)",
                        (principal.tenant_id, case_id, 1, _canonical(scope).decode(), scope_sha,
                         principal.actor_id, self._now().isoformat()))
@@ -333,7 +407,7 @@ class CaseFoundation:
                      lawful_basis_reference: str, expires_at: str) -> dict[str, Any]:
         def op(db: sqlite3.Connection) -> dict[str, Any]:
             self._authorized(db, principal, frozenset({"OWNER"}))
-            self._assert_case(db, principal, case_id)
+            self._assert_case(db, principal, case_id, frozenset({"OWNER"}))
             old, _ = self._latest_scope(db, principal, case_id)
             revision = int(old["revision"]) + 1
             scope = self._make_scope(revision=revision, allowed_capabilities=allowed_capabilities,
@@ -360,7 +434,7 @@ class CaseFoundation:
 
         def op(db: sqlite3.Connection) -> dict[str, str]:
             self._authorized(db, principal, WRITERS)
-            self._assert_case(db, principal, case_id)
+            case = self._assert_case(db, principal, case_id, WRITERS)
             current, scope = self._latest_scope(db, principal, case_id)
             if _parse_utc(scope["expires_at"]) <= self._now():
                 raise CaseGateError("SCOPE_EXPIRED")
@@ -375,7 +449,7 @@ class CaseFoundation:
             body = {"schema_version": SCHEMA_VERSION, "action": action,
                     "capabilities": capabilities, "sources": sources, "subjects": subjects,
                     "description": description, "scope_sha256": current["scope_sha256"],
-                    "revision": current["revision"]}
+                    "revision": current["revision"], "acl_revision": case["acl_revision"]}
             plan_sha = _digest(body)
             db.execute("INSERT INTO case_plans VALUES(?,?,?,?,?,?,?,?,?)",
                        (principal.tenant_id, case_id, plan_id, current["revision"],
@@ -410,13 +484,15 @@ class CaseFoundation:
 
         def op(db: sqlite3.Connection) -> dict[str, str]:
             self._authorized(db, principal, APPROVERS)
-            self._assert_case(db, principal, case_id)
+            case = self._assert_case(db, principal, case_id, APPROVERS)
             scope_row, scope = self._latest_scope(db, principal, case_id)
             plan = self._get_plan(db, principal, case_id, plan_id)
             if plan["proposed_by"] == principal.actor_id:
                 raise CaseGateError("FOUR_EYES_REQUIRED")
             if plan["scope_sha256"] != scope_row["scope_sha256"]:
                 raise CaseGateError("STALE_SCOPE")
+            if json.loads(plan["body_json"]).get("acl_revision") != case["acl_revision"]:
+                raise CaseGateError("STALE_ASSIGNMENTS")
             expiry = min(self._now() + timedelta(seconds=ttl_seconds), _parse_utc(scope["expires_at"]))
             if expiry <= self._now():
                 raise CaseGateError("SCOPE_EXPIRED")
@@ -442,7 +518,7 @@ class CaseFoundation:
         """Validate a stored signed approval; NEVER execute an investigation."""
         with self._lock, self._connection() as db:
             self._authorized(db, principal, WRITERS | APPROVERS)
-            self._assert_case(db, principal, case_id)
+            case = self._assert_case(db, principal, case_id, WRITERS | APPROVERS)
             scope_row, scope = self._latest_scope(db, principal, case_id)
             plan = self._get_plan(db, principal, case_id, plan_id)
             row = db.execute(
@@ -467,6 +543,8 @@ class CaseFoundation:
             if (_parse_utc(row["expires_at"]) <= self._now()
                 or _parse_utc(scope["expires_at"]) <= self._now()):
                 raise CaseGateError("APPROVAL_EXPIRED")
+            if json.loads(plan["body_json"]).get("acl_revision") != case["acl_revision"]:
+                raise CaseGateError("STALE_ASSIGNMENTS")
             if (row["scope_sha256"] != scope_row["scope_sha256"]
                 or plan["scope_sha256"] != scope_row["scope_sha256"]
                 or row["plan_sha256"] != plan["plan_sha256"]
@@ -475,11 +553,53 @@ class CaseFoundation:
             return {"gate": "APPROVED", "execution": "NOT_CONNECTED", "plan_sha256": plan["plan_sha256"],
                     "scope_sha256": scope_row["scope_sha256"]}
 
-    def verify_audit(self, principal: CasePrincipal) -> bool:
+    def _sign_anchor(self, record: Mapping[str, object]) -> str:
+        return hmac.new(self._secret, b"case-audit-anchor.v1:" + _canonical(record),
+                        hashlib.sha256).hexdigest()
+
+    def export_audit_anchor(self, principal: CasePrincipal) -> dict[str, object]:
+        """Signed checkpoint MUST be stored OUTSIDE this database by a trusted operator."""
+        with self._lock, self._connection() as db:
+            self._authorized(db, principal, frozenset({"OWNER"}))
+            row = db.execute(
+                "SELECT seq,event_hash FROM case_audit WHERE tenant_id=? ORDER BY seq DESC LIMIT 1",
+                (principal.tenant_id,),
+            ).fetchone()
+            record: dict[str, object] = {
+                "tenant_id": principal.tenant_id, "seq": int(row["seq"]) if row else 0,
+                "head_hash": str(row["event_hash"]) if row else "0" * 64,
+            }
+            return {**record, "signature": self._sign_anchor(record)}
+
+    def verify_audit(self, principal: CasePrincipal,
+                     *, external_anchor: Mapping[str, object] | None = None) -> bool:
+        """Local chain alone CANNOT detect truncation; signed external anchor can."""
         with self._lock, self._connection() as db:
             self._authorized(db, principal)
-            rows = db.execute("SELECT * FROM case_audit WHERE tenant_id=? ORDER BY seq", (principal.tenant_id,)).fetchall()
+            expected_seq = None
+            expected_head = None
+            if external_anchor is not None:
+                try:
+                    if external_anchor["tenant_id"] != principal.tenant_id:
+                        return False
+                    record = {k: external_anchor[k] for k in ("tenant_id", "seq", "head_hash")}
+                    if type(record["seq"]) is not int or record["seq"] < 0:
+                        return False
+                    if not isinstance(record["head_hash"], str) or len(record["head_hash"]) != 64:
+                        return False
+                    if not hmac.compare_digest(
+                        self._sign_anchor(record), str(external_anchor["signature"])
+                    ):
+                        return False
+                    expected_seq, expected_head = record["seq"], record["head_hash"]
+                except (KeyError, ValueError, TypeError):
+                    return False
+            rows = db.execute(
+                "SELECT * FROM case_audit WHERE tenant_id=? ORDER BY seq",
+                (principal.tenant_id,),
+            ).fetchall()
             prev = "0" * 64
+            anchored = expected_seq == 0 and expected_head == prev
             for seq, row in enumerate(rows, start=1):
                 payload = {name: row[name] for name in (
                     "tenant_id", "seq", "case_id", "actor_id", "action", "target_id",
@@ -487,4 +607,6 @@ class CaseFoundation:
                 if row["seq"] != seq or row["prev_hash"] != prev or row["event_hash"] != _digest(payload):
                     return False
                 prev = row["event_hash"]
-            return True
+                if expected_seq == seq and expected_head == prev:
+                    anchored = True
+            return anchored if external_anchor is not None else True
