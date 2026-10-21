@@ -1,0 +1,53 @@
+name: case-security-isolated
+
+on:
+  push:
+    branches:
+      - feature/sherlock-case-foundation-phase-01
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  case-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: case-ci-only-password
+          POSTGRES_USER: postgres
+          POSTGRES_DB: sherlock_case_test
+        options: >-
+          --health-cmd "pg_isready -U postgres -d sherlock_case_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+        ports:
+          - 5432:5432
+    env:
+      PGPASSWORD: case-ci-only-password
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGDATABASE: sherlock_case_test
+    steps:
+      - name: Checkout (non-production)
+        uses: actions/checkout@v4
+      - name: Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Phase 1 unit tests (SQLite synthetic only)
+        run: PYTHONPATH=src python -m unittest -v tests.test_case_foundation
+      - name: Install psql client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+      - name: PostgreSQL case RLS isolation (synthetic only)
+        run: |
+          psql -X -v ON_ERROR_STOP=1 -f migrations/001_case_foundation_postgres.sql
+          psql -X -v ON_ERROR_STOP=1 -f migrations/002_case_membership_rls.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/postgres/test_case_rls.sql
