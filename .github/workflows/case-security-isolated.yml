@@ -41,7 +41,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Phase 1 unit tests (SQLite synthetic only)
-        run: PYTHONPATH=src python -m unittest -v tests.test_case_foundation
+        run: PYTHONPATH=src python -m unittest -v tests.test_case_foundation tests.test_case_artifacts
       - name: Install psql client
         run: |
           sudo apt-get update -qq
@@ -51,3 +51,5 @@ jobs:
           psql -X -v ON_ERROR_STOP=1 -f migrations/001_case_foundation_postgres.sql
           psql -X -v ON_ERROR_STOP=1 -f migrations/002_case_membership_rls.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/postgres/test_case_rls.sql
+          psql -X -v ON_ERROR_STOP=1 -f migrations/003_case_artifacts_synthetic.sql
+          psql -X -v ON_ERROR_STOP=1 -f tests/postgres/test_artifacts_rls.sql
