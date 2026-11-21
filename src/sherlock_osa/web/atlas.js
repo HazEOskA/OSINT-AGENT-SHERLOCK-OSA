@@ -1,11 +1,7 @@
 "use strict";
 const $=(s)=>document.querySelector(s);
-const RAW_SOURCES=[
-{id:"osint-framework",label:"OSINT Framework",type:"tree",url:"https://raw.githubusercontent.com/lockfale/OSINT-Framework/master/public/arf.json"},
-{id:"awesome-osint",label:"Awesome OSINT",type:"markdown",url:"https://raw.githubusercontent.com/jivoi/awesome-osint/master/README.md"},
-{id:"awesome-threat-intelligence",label:"Awesome Threat Intelligence",type:"markdown",url:"https://raw.githubusercontent.com/hslatman/awesome-threat-intelligence/main/README.md"}
-];
 const META_SOURCES=[
+{name:"OSINT4ALL",url:"https://osint4all.github.io/",kind:"CATALOG",desc:"Katalog OSINT4ALL, wersja GitHub strony start.me; wpisy tylko do odkrywania narzędzi."},
 {name:"OSINT Framework",url:"https://osintframework.com/",kind:"TREE",desc:"Interaktywna mapa narzędzi i źródeł OSINT."},
 {name:"Awesome OSINT",url:"https://github.com/jivoi/awesome-osint",kind:"CURATED",desc:"Duża, stale aktualizowana lista narzędzi i źródeł."},
 {name:"Bellingcat Toolkit",url:"https://bellingcat.gitbook.io/toolkit",kind:"INVESTIGATION",desc:"Praktyczne narzędzia dla śledztw online i geolokalizacji."},
@@ -33,7 +29,7 @@ function catalogOnly(t){
 }
 function makeTool(t){
  const url=normUrl(t.url);if(!url)return null;
- const out={name:clean(t.name)||new URL(url).hostname,url:url,description:clean(t.description),category:clean(t.category)||"Uncategorized",source:t.source,api:!!t.api,local:!!t.local,registration:!!t.registration,opsec:clean(t.opsec).toLowerCase(),pricing:clean(t.pricing),runtime:!!t.runtime,catalogOnly:!!t.catalogOnly};
+ const out={name:clean(t.name)||new URL(url).hostname,url:url,description:clean(t.description),category:clean(t.category)||"Uncategorized",source:t.source,api:!!t.api,local:!!t.local,registration:!!t.registration,opsec:clean(t.opsec).toLowerCase(),pricing:clean(t.pricing),runtime:!!t.runtime,ready:!!t.ready,catalogOnly:!!t.catalogOnly,sources:Array.isArray(t.sources)?t.sources:undefined,categories:Array.isArray(t.categories)?t.categories:undefined};
  out.catalogOnly=out.catalogOnly||catalogOnly(out);
  return out;
 }
@@ -73,7 +69,12 @@ function mergeTools(items){
  items.forEach((item)=>{
   const key=normUrl(item.url).toLowerCase();if(!key)return;
   const old=map.get(key);
-  if(!old){item.sources=[item.source];item.categories=[item.category];map.set(key,item);return}
+  if(!old){
+   item.sources=[...new Set([...(item.sources||[]),item.source])];
+   item.categories=[...new Set([...(item.categories||[]),item.category])];
+   item.source=item.sources.join(" + ");
+   map.set(key,item);return;
+  }
   old.sources=[...new Set(old.sources.concat([item.source]))];
   old.categories=[...new Set(old.categories.concat([item.category]))];
   old.source=old.sources.join(" + ");old.category=old.categories.join(" / ");
@@ -86,35 +87,56 @@ function mergeTools(items){
 async function loadRuntime(){
  const out=[];
  try{
-  const r=await fetch("/api/v1/health",{cache:"no-store"});if(!r.ok)return out;
-  const h=await r.json();
-  const src=((h.research||{}).sources||[]);
-  src.forEach((s)=>{
-   const t=makeTool({name:s.name,url:"/",description:(s.family||"Sherlock native source")+" · "+(s.ready?"READY":"GATED"),category:"Sherlock Runtime / "+(s.family||"SOURCE"),source:"Sherlock Runtime",api:true,local:!s.network_effect,runtime:true,opsec:"controlled"});
+  const r=await fetch("/api/v1/health",{cache:"no-store"});
+  if(!r.ok)throw new Error("HTTP "+r.status);
+  const h=await r.json(),src=((h.research||{}).sources||[]);
+  if(!Array.isArray(src))throw new Error("RUNTIME_HEALTH_SCHEMA_INVALID");
+  src.forEach((item)=>{
+   const name=String(item.name||"");
+   if(!name)return;
+   const t=makeTool({
+    name,url:window.location.origin+"/api/v1/health?source="+encodeURIComponent(name),
+    description:(item.family||"Sherlock native source")+" · "+(item.ready?"READY":"GATED"),
+    category:"Sherlock Runtime / "+(item.family||"SOURCE"),
+    source:"Sherlock Runtime",api:true,local:!item.network_effect,runtime:true,ready:!!item.ready,opsec:"controlled"
+   });
    if(t)out.push(t);
   });
- }catch{}
- return out;
+  return {tools:out,ok:true};
+ }catch(err){return {tools:out,ok:false,error:String(err)}}
 }
 async function sync(){
  $("#sync-state").textContent="SYNCING";$("#refresh").disabled=true;
  const all=[];state.sourceStatus={};
- for(const src of RAW_SOURCES){
-  try{
-   const r=await fetch(src.url,{cache:"no-store"});if(!r.ok)throw new Error("HTTP "+r.status);
-   const text=await r.text();
-   all.push(...(src.type==="tree"?parseTree(JSON.parse(text),src.label):parseMarkdown(text,src.label)));
-   state.sourceStatus[src.id]={ok:true,label:src.label};
-  }catch(err){state.sourceStatus[src.id]={ok:false,label:src.label,error:String(err)}}
+ try{
+  const response=await fetch("/api/v1/world-atlas/catalog",{cache:"no-store"});
+  if(!response.ok)throw new Error("HTTP "+response.status);
+  const data=await response.json();
+  if(!Array.isArray(data.tools)||!Array.isArray(data.sources))throw new Error("ATLAS_CATALOG_SCHEMA_INVALID");
+  for(const item of data.tools){
+   const t=makeTool({...item,local:item.local_install,
+    catalogOnly:item.execution_class==="CATALOG_ONLY_RESTRICTED"});
+   if(t)all.push(t);
+  }
+  for(const src of data.sources){
+   const label=String(src.name||"Unknown source");
+   state.sourceStatus[label]={ok:src.status==="SYNCED",label,error:src.error||""};
+  }
+ }catch(err){
+  state.sourceStatus.catalog={ok:false,label:"World Atlas API",error:String(err)};
  }
- const runtime=await loadRuntime();all.push(...runtime);state.sourceStatus.runtime={ok:true,label:"Sherlock Runtime"};
+ const runtime=await loadRuntime();all.push(...runtime.tools);
+ state.sourceStatus.runtime={ok:runtime.ok,label:"Sherlock Runtime",error:runtime.error||""};
  state.tools=mergeTools(all);state.limit=120;
  buildFilters();renderSources();applyFilters();
  $("#stat-total").textContent=state.tools.length.toLocaleString("pl-PL");
- $("#stat-categories").textContent=new Set(state.tools.map((x)=>x.category.split(" / ")[0])).size;
- $("#stat-sources").textContent=Object.values(state.sourceStatus).filter((x)=>x.ok).length;
- $("#stat-runtime").textContent=state.tools.filter((x)=>x.runtime).length;
- $("#sync-state").textContent="LIVE";$("#sync-state").style.color="var(--green)";$("#refresh").disabled=false;
+ $("#stat-categories").textContent=new Set(state.tools.map(x=>x.category.split(" / ")[0])).size;
+ $("#stat-sources").textContent=Object.values(state.sourceStatus).filter(x=>x.ok).length;
+ $("#stat-runtime").textContent=state.tools.filter(x=>x.runtime&&x.ready).length;
+ const healthy=Object.values(state.sourceStatus).every(x=>x.ok);
+ $("#sync-state").textContent=healthy?"LIVE":"DEGRADED";
+ $("#sync-state").style.color=healthy?"var(--green)":"var(--amber)";
+ $("#refresh").disabled=false;
 }
 function renderSources(){
  const el=$("#source-strip");el.replaceChildren();
@@ -140,7 +162,7 @@ function buildFilters(){
 }
 function modeMatch(t,m){
  if(!m)return true;
- if(m==="runtime")return t.runtime;if(m==="api")return t.api;if(m==="local")return t.local;if(m==="passive")return t.opsec==="passive";if(m==="active")return t.opsec==="active";if(m==="catalog")return t.catalogOnly;return true;
+ if(m==="runtime")return t.runtime&&t.ready;if(m==="api")return t.api;if(m==="local")return t.local;if(m==="passive")return t.opsec==="passive";if(m==="active")return t.opsec==="active";if(m==="catalog")return !t.runtime;return true;
 }
 function applyFilters(){
  const q=$("#q").value.trim().toLowerCase(),source=$("#source-filter").value,cat=$("#category-filter").value,mode=$("#mode-filter").value;
@@ -166,7 +188,7 @@ function renderTools(){
   src.className="source";src.textContent=t.source;h.textContent=t.name;lhs.append(src,h);head.append(lhs);
   const p=document.createElement("p");p.textContent=t.description||new URL(t.url).hostname;
   const tags=document.createElement("div");tags.className="tags";
-  if(t.runtime)tags.append(mkTag("SHERLOCK LIVE","runtime"));if(t.api)tags.append(mkTag("API"));if(t.local)tags.append(mkTag("LOCAL"));if(t.registration)tags.append(mkTag("REGISTRATION"));if(t.opsec)tags.append(mkTag(t.opsec.toUpperCase(),t.opsec==="active"?"active":""));if(t.pricing)tags.append(mkTag(t.pricing.toUpperCase()));if(t.catalogOnly)tags.append(mkTag("CATALOG ONLY","restricted"));
+  if(t.runtime)tags.append(mkTag(t.ready?"SHERLOCK LIVE":"SHERLOCK GATED",t.ready?"runtime":"restricted"));else tags.append(mkTag(t.catalogOnly?"CATALOG RESTRICTED":"CATALOG ONLY",t.catalogOnly?"restricted":""));if(t.api)tags.append(mkTag("API"));if(t.local)tags.append(mkTag("LOCAL"));if(t.registration)tags.append(mkTag("REGISTRATION"));if(t.opsec)tags.append(mkTag(t.opsec.toUpperCase(),t.opsec==="active"?"active":""));if(t.pricing)tags.append(mkTag(t.pricing.toUpperCase()));
   const foot=document.createElement("div");foot.className="tool-foot";
   const c=document.createElement("span");c.className="category";c.textContent=t.category;
   const open=document.createElement("a");open.className="open";open.href=t.url;open.target="_blank";open.rel="noopener noreferrer";open.textContent="OPEN ↗";
