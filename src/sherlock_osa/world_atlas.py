@@ -7,7 +7,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Mapping, Sequence
 from urllib.parse import urlsplit
 
@@ -18,11 +18,13 @@ _CACHE_TTL_SECONDS = 900
 _CACHE_LOCK = threading.Lock()
 _CACHE_AT = 0.0
 _CACHE_TOOLS: tuple["AtlasTool", ...] = ()
+_CACHE_ERRORS: dict[str, str] = {}
 
 _SOURCES = (
     ("OSINT Framework", "tree", "https://raw.githubusercontent.com/lockfale/OSINT-Framework/master/public/arf.json"),
     ("Awesome OSINT", "markdown", "https://raw.githubusercontent.com/jivoi/awesome-osint/master/README.md"),
     ("Awesome Threat Intelligence", "markdown", "https://raw.githubusercontent.com/hslatman/awesome-threat-intelligence/main/README.md"),
+    ("OSINT4ALL", "markdown", "https://raw.githubusercontent.com/osint4all/osint4all.github.io/main/README.md"),
 )
 
 _KIND_TERMS = {
@@ -55,6 +57,8 @@ class AtlasTool:
     registration: bool = False
     opsec: str = ""
     pricing: str = ""
+    sources: tuple[str, ...] = ()
+    categories: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -63,6 +67,8 @@ class AtlasTool:
             "description": self.description,
             "category": self.category,
             "source": self.source,
+            "sources": list(self.sources or (self.source,)),
+            "categories": list(self.categories or (self.category,)),
             "api": self.api,
             "local_install": self.local_install,
             "registration": self.registration,
@@ -90,6 +96,26 @@ def atlas_overview() -> dict[str, object]:
         ],
         "runtime_adapter_count": len(SOURCE_DESCRIPTORS),
         "principle": "ATLAS_CONSIDERS_ALL; RUNTIME_EXECUTES_ONLY_ADAPTER_BACKED_SAFE_SOURCES",
+    }
+
+
+def atlas_catalog() -> dict[str, object]:
+    """Read-only catalogue: discovery never grants execution authority."""
+    tools, errors = _catalog()
+    return {
+        "version": "world-atlas-catalog.v1",
+        "tool_count": len(tools),
+        "tools": [tool.to_dict() for tool in tools],
+        "sources": [
+            {
+                "name": name,
+                "url": url,
+                "status": "ERROR" if name in errors else "SYNCED",
+                "error": errors.get(name),
+            }
+            for name, _, url in _SOURCES
+        ],
+        "catalog_entries_auto_executed": False,
     }
 
 
@@ -191,11 +217,11 @@ def _runtime_sources(health: Mapping[str, object] | None) -> dict[str, Mapping[s
 
 
 def _catalog() -> tuple[tuple[AtlasTool, ...], dict[str, str]]:
-    global _CACHE_AT, _CACHE_TOOLS
+    global _CACHE_AT, _CACHE_TOOLS, _CACHE_ERRORS
     now = time.monotonic()
     with _CACHE_LOCK:
         if _CACHE_TOOLS and now - _CACHE_AT < _CACHE_TTL_SECONDS:
-            return _CACHE_TOOLS, {}
+            return _CACHE_TOOLS, dict(_CACHE_ERRORS)
 
     tools: list[AtlasTool] = []
     errors: dict[str, str] = {}
@@ -221,8 +247,9 @@ def _catalog() -> tuple[tuple[AtlasTool, ...], dict[str, str]]:
                 errors[name] = f"{type(exc).__name__}: {exc}"[:300]
 
     deduped = _dedupe(tools)
-    if deduped:
-        with _CACHE_LOCK:
+    with _CACHE_LOCK:
+        _CACHE_ERRORS = dict(errors)
+        if deduped:
             _CACHE_TOOLS = deduped
             _CACHE_AT = now
     return deduped, errors
@@ -332,13 +359,23 @@ def _normalize_url(raw: str) -> str:
 def _dedupe(tools: Sequence[AtlasTool]) -> tuple[AtlasTool, ...]:
     deduped: dict[str, AtlasTool] = {}
     for tool in tools:
-        key = tool.url.casefold()
+        key = _normalize_url(tool.url).casefold()
+        if not key:
+            continue
         current = deduped.get(key)
         if current is None:
             deduped[key] = tool
             continue
-        if len(tool.description) > len(current.description):
-            deduped[key] = tool
+        sources = tuple(dict.fromkeys((
+            *(current.sources or (current.source,)),
+            *(tool.sources or (tool.source,)),
+        )))
+        categories = tuple(dict.fromkeys((
+            *(current.categories or (current.category,)),
+            *(tool.categories or (tool.category,)),
+        )))
+        preferred = tool if len(tool.description) > len(current.description) else current
+        deduped[key] = replace(preferred, sources=sources, categories=categories)
     return tuple(sorted(deduped.values(), key=lambda item: (item.name.casefold(), item.url)))
 
 
