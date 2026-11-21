@@ -11,7 +11,7 @@ from urllib.parse import parse_qs, urlsplit
 from sherlock_osa.emailosint import EmailOsintClient
 from sherlock_osa.errors import SherlockError
 from sherlock_osa.service import MissionService
-from sherlock_osa.world_atlas import atlas_overview
+from sherlock_osa.world_atlas import atlas_overview, atlas_catalog
 
 
 MISSION_PATH = re.compile(r"^/api/v1/missions/([0-9a-f-]{36})$")
@@ -169,6 +169,9 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
                 return
             if path == "/api/v1/world-atlas":
                 self._json(200, atlas_overview())
+                return
+            if path == "/api/v1/world-atlas/catalog":
+                self._json(200, atlas_catalog())
                 return
 
             self._require_auth()
