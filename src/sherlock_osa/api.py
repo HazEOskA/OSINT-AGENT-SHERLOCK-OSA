@@ -8,6 +8,7 @@ from importlib.resources import files
 from typing import Any, Callable
 from urllib.parse import parse_qs, urlsplit
 
+from sherlock_osa.capability_registry import build_capability_registry
 from sherlock_osa.emailosint import EmailOsintClient
 from sherlock_osa.errors import SherlockError
 from sherlock_osa.service import MissionService
@@ -175,6 +176,10 @@ def handler_factory(service: Any) -> type[BaseHTTPRequestHandler]:
                 return
 
             self._require_auth()
+            if path == "/api/v1/agent/capabilities":
+                catalog = atlas_catalog()
+                self._json(200, build_capability_registry(catalog_tools=catalog["tools"]))
+                return
             if path == "/api/v1/capabilities":
                 self._json(200, service.capabilities())
                 return

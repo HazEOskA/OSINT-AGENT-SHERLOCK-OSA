@@ -32,3 +32,13 @@ The catalog keeps provider metadata such as API, local-install, registration, pr
 - Unreachable upstream catalogs are shown as errors/degraded states, not as successful sync; cached source errors are preserved until refresh.
 - Live reachability and licensing of third-party tools remain unverified by offline fixtures. Catalog inclusion is not execution authorization.
 - This phase does not change Search Core, research service, source worker, Source Registry, or Sherlock Enterprise.
+
+## P0.3 Agent Capability Registry (read-only)
+
+- Authenticated operator-only endpoint: `GET /api/v1/agent/capabilities` using existing Bearer token validation. Unauthenticated requests receive `401`.
+- The endpoint composes native `SOURCE_DESCRIPTORS` and the existing World Atlas catalog in a versioned, stable, deduplicated inventory, preserving upstream provenance.
+- `ADAPTER_READY` means dependencies and local configuration are ready and an existing policy mode matches; it **does not** prove live provider reachability, scope authorization, or execution.
+- `CATALOG_ONLY`, `RESTRICTED`, and `UNAVAILABLE` entries cannot be executed by the registry. Unknown catalog execution classes fail closed to `RESTRICTED`.
+- Catalog resources have no runtime adapter and no granted execution authority. Every entry explicitly has `authorization_granted: false`; existing `CapabilityBroker` remains the sole signed-scope authorization authority.
+- Provider pricing, licensing, and external availability are not independently validated. The registry never contacts providers other than the existing catalog-sync fetch for metadata.
+- No modifications to Search Core, `source_registry.py`, `policy.py`, source workers, Enterprise, or execution routes in P0.3.
