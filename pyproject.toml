@@ -24,6 +24,9 @@ dependencies = [
   "phonenumbers==9.0.38",
 ]
 
+[project.optional-dependencies]
+research = []
+
 [project.scripts]
 sherlock-osa = "sherlock_osa.cli:main"
 
